@@ -165,6 +165,13 @@ final class AppModel: ObservableObject {
         let w = Store.loadNavWidth()
         navWidth = (w == 0) ? Win11.Metrics.navPaneDefaultWidth : w
         if navExpanded.isEmpty { navExpanded = ["thisPC", "cloud"] }  // sensible defaults
+
+        // First launch: fire the Desktop/Documents/Downloads permission prompts up front
+        // so the file manager asks once instead of surprising the user mid-navigation.
+        if !prefs.didPrimeFolderAccess {
+            prefs.didPrimeFolderAccess = true
+            DiskAccess.primeFolderPermissions()
+        }
     }
 
     // MARK: quick access pins

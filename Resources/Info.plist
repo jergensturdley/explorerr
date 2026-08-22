@@ -30,5 +30,15 @@
 	<string>NSApplication</string>
 	<key>NSSupportsSuddenTermination</key>
 	<false/>
+	<key>NSDesktopFolderUsageDescription</key>
+	<string>Explorerr is a file manager and needs access to browse and manage files on your Desktop.</string>
+	<key>NSDocumentsFolderUsageDescription</key>
+	<string>Explorerr is a file manager and needs access to browse and manage files in your Documents folder.</string>
+	<key>NSDownloadsFolderUsageDescription</key>
+	<string>Explorerr is a file manager and needs access to browse and manage files in your Downloads folder.</string>
+	<key>NSRemovableVolumesUsageDescription</key>
+	<string>Explorerr is a file manager and needs access to browse and manage files on removable drives.</string>
+	<key>NSNetworkVolumesUsageDescription</key>
+	<string>Explorerr is a file manager and needs access to browse and manage files on network drives.</string>
 </dict>
 </plist>

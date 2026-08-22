@@ -4,6 +4,7 @@ import SwiftUI
 struct SettingsView: View {
     @EnvironmentObject var app: AppModel
     @Environment(\.colorScheme) private var scheme
+    @State private var fullDiskAccess = DiskAccess.hasFullDiskAccess
 
     var body: some View {
         TabView {
@@ -38,8 +39,28 @@ struct SettingsView: View {
                 get: { app.prefs.syncTerminalCD },
                 set: { app.prefs.syncTerminalCD = $0 }
             ))
+
+            Section("File access") {
+                HStack(spacing: 6) {
+                    Image(systemName: fullDiskAccess ? "checkmark.circle.fill" : "exclamationmark.triangle.fill")
+                        .foregroundStyle(fullDiskAccess ? Color.green : Color.orange)
+                    Text(fullDiskAccess ? "Full Disk Access granted" : "Full Disk Access not granted")
+                }
+                if !fullDiskAccess {
+                    Text("Needed for the Recycle Bin and protected folders (Mail, Safari, Time Machine). macOS only lets you grant it in System Settings: turn on Explorerr under Privacy & Security, Full Disk Access, then relaunch the app.")
+                        .font(.system(size: 11.5))
+                        .foregroundStyle(.secondary)
+                        .fixedSize(horizontal: false, vertical: true)
+                    Button("Open Full Disk Access Settings…") {
+                        DiskAccess.openFullDiskAccessSettings()
+                    }
+                }
+            }
         }
         .padding(18)
+        .onReceive(NotificationCenter.default.publisher(for: NSApplication.didBecomeActiveNotification)) { _ in
+            fullDiskAccess = DiskAccess.hasFullDiskAccess
+        }
     }
 
     private var viewTab: some View {

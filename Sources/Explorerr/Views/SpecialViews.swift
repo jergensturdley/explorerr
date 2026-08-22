@@ -378,13 +378,33 @@ struct TrashView: View {
             if tab.loading && tab.items.isEmpty {
                 ProgressView().frame(maxWidth: .infinity, maxHeight: .infinity)
             } else if tab.sortedItems.isEmpty {
-                VStack(spacing: 12) {
-                    TrashIconView(size: 54, full: false)
-                    Text("The Recycle Bin is empty.")
-                        .font(Win11.Fonts.body)
-                        .foregroundStyle(p.textSecondary)
+                if DiskAccess.hasFullDiskAccess {
+                    VStack(spacing: 12) {
+                        TrashIconView(size: 54, full: false)
+                        Text("The Recycle Bin is empty.")
+                            .font(Win11.Fonts.body)
+                            .foregroundStyle(p.textSecondary)
+                    }
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+                } else {
+                    // macOS gates ~/.Trash behind Full Disk Access; without it this view
+                    // is always empty, so explain instead of pretending the bin is empty.
+                    VStack(spacing: 12) {
+                        TrashIconView(size: 54, full: false)
+                        Text("Explorerr needs Full Disk Access to show the Recycle Bin.")
+                            .font(Win11.Fonts.body)
+                            .foregroundStyle(p.textPrimary)
+                        Text("Turn on Explorerr under Privacy & Security, Full Disk Access, then relaunch.")
+                            .font(.system(size: 12))
+                            .foregroundStyle(p.textSecondary)
+                        Button("Open Full Disk Access Settings…") {
+                            DiskAccess.openFullDiskAccessSettings()
+                        }
+                        .buttonStyle(WinStandardButtonStyle())
+                        .padding(.top, 4)
+                    }
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
                 }
-                .frame(maxWidth: .infinity, maxHeight: .infinity)
             } else {
                 DetailsView(tab: tab, app: app)
             }

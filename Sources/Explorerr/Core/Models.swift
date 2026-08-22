@@ -140,6 +140,8 @@ struct Prefs: Codable {
     var showDetailsPane: Bool = false
     /// Dolphin-style: navigating the view cd's the integrated terminal when the shell is idle.
     var syncTerminalCD: Bool = true
+    /// One-time: the Desktop/Documents/Downloads permission prompts were triggered at launch.
+    var didPrimeFolderAccess: Bool = false
 
     init() {}
 
@@ -155,6 +157,7 @@ struct Prefs: Codable {
         statusVisible = try c.decodeIfPresent(Bool.self, forKey: .statusVisible) ?? true
         showDetailsPane = try c.decodeIfPresent(Bool.self, forKey: .showDetailsPane) ?? false
         syncTerminalCD = try c.decodeIfPresent(Bool.self, forKey: .syncTerminalCD) ?? true
+        didPrimeFolderAccess = try c.decodeIfPresent(Bool.self, forKey: .didPrimeFolderAccess) ?? false
     }
 }
 
