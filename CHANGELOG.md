@@ -31,8 +31,8 @@ for every UI regression found in 1.0.
 - Real Edit-menu wiring: ⌘X/⌘C/⌘V/⌘A/⌘Z/⇧⌘Z now act on files (with text-field
   fallback while renaming or editing the path), Copy as Path (⇧⌘C), Duplicate (⌘D)
 - Go shortcuts: Back ⌘[, Forward ⌘], Up ⌘↑, Open Selection ⌘↓; Windows keys fixed
-  (F2 rename, F4 terminal, F5 refresh/copy, F6 move — previously mapped to the
-  wrong keycodes)
+  (F2 rename, F4 terminal, F5 refresh/copy, F6 move; these were previously
+  mapped to the wrong keycodes)
 
 ### Tabs
 - Drag tabs to reorder; middle-click a tab to close it

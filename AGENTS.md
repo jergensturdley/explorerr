@@ -25,12 +25,17 @@ integrated terminal.
 ```sh
 swift build                     # debug build (compile check)
 swift build -c release          # release build
-.build/debug/Explorerr --selftest   # logic checks (30 checks)
+.build/debug/Explorerr --selftest   # logic checks (52 checks)
 ./scripts/make-app.sh           # build release + assemble + sign build/Explorerr.app
 open build/Explorerr.app        # launch
 ./scripts/verify.sh             # build, bundle, launch, check process alive, quit
+./scripts/make-dmg.sh [version] # package the app into build/Explorerr-<version>.dmg
 ./scripts/gen-icon.swift        # regenerate Resources/AppIcon.icns (then re-run make-app)
 ```
+
+CI (`.github/workflows/ci.yml`) builds, runs the selftest, and uploads a DMG artifact on
+every push/PR. Tags matching `v*` trigger `release.yml`, which publishes a GitHub release
+with a version-stamped zip and DMG.
 
 ## Architecture
 
@@ -45,12 +50,12 @@ in `Sources/Explorerr/`. No external dependencies.
 | Window chrome | `Chrome/…` | Hidden macOS titlebar (`WindowConfigurator`), Windows caption buttons (`WindowControls`), Mica backdrop, per-pane tab strips (`TabStrip.swift`), custom dropdown menu system (`MenuPopup.swift`, anchored in the window coordinate space named "win"). |
 | Bars | `Chrome/CommandBar`, `AddressBar`, `StatusBar` | Win11 command bar; breadcrumb address bar with editable path mode (paste normalization + autocomplete in `PathBarEngine`); Win10-style status bar. |
 | Navigation pane | `Views/NavigationPane.swift` | Home, Gallery, pins, cloud storage, This PC tree, Network, Recycle Bin; resizable divider. |
-| Content | `Views/FolderViews`, `FolderContentView` | Details/list/icons/tiles per tab, selection model, context menus, inline rename, drag and drop. |
+| Content | `Views/FolderViews`, `FolderContentView`, `BandSelection` | Details/list/icons/tiles per tab, selection model, context menus, inline rename, drag and drop. `BandSelection.swift` holds the rubber-band machinery: per-item frames reported via PreferenceKey feed the marquee, autoscroll, grid-aware arrow navigation (`BandSelect.spatialMove`), and window-space middle-click hit-testing. |
 | Special views | `Views/SpecialViews.swift`, `Dialogs.swift` | Home, This PC (drive usage), Gallery, Trash, Network; conflict/progress/properties/about/shortcuts dialogs. |
 | Core state | `Core/AppModel`, `TabState`, `WindowModel`, `Persistence` | `AppModel` shared (prefs, pins, undo, recents, clipboard-cut); `TabController` per pane; `WindowModel` per window (1-3 panes, weights, sync panes, terminal visibility). Session layouts persist in UserDefaults with legacy migration. |
 | File ops | `Core/FileOps.swift` | Copy/cut/paste via NSPasteboard, Replace/Skip/Keep-both conflicts, recycle + restore, rename, new items, undo, cross-volume move fallback, ditto zip. |
 | Terminal | `Core/PtyProcess`, `TerminalEmulator`, `TerminalController`, `Views/TerminalPanelView` | posix_openpt + fork + execve spawn the login shell; VT100/xterm-256color emulator (CSI/SGR/OSC, scrollback, alt-screen); key translation is IME-safe. |
-| Menus/shortcuts | `App/Commands.swift` + event monitors in `App/MainWindow.swift` | Win-style keys (F2 rename, Cmd-R refresh, Option-arrows, Backspace = Up) and Dolphin keys (F4 terminal, F5/F6 pane transfer). Right-click uses native `.contextMenu`; command-bar dropdowns use the custom Win11 popup. |
+| Menus/shortcuts | `App/Commands.swift` + event monitors in `App/MainWindow.swift` | Win-style keys (F2 rename, Cmd-R refresh, Option-arrows, Backspace = Up), Dolphin keys (F4 terminal, F5/F6 pane transfer), grid-aware arrows, type-ahead, and middle-click handling (close tab, open folder links in background tabs, mouse buttons 4/5). Monitors are per-window and hit-test window-space frames collected via PreferenceKeys (top-left origin: flip AppKit's Y before comparing). Right-click uses native `.contextMenu`; command-bar dropdowns use the custom Win11 popup. |
 
 ## Conventions
 
