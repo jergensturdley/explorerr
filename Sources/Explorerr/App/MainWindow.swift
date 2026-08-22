@@ -93,6 +93,13 @@ struct MainWindow: View {
                 VStack(spacing: 0) {
                     // Titlebar strip: one tab strip per pane + window controls
                     HStack(spacing: 0) {
+                        // Match the content row's leading NavigationPane so tab strips align with their panes.
+                        Color.clear
+                            .frame(width: app.navWidth)
+                            .overlay(alignment: .trailing) {
+                                Rectangle().fill(themeDivider).frame(width: 1).padding(.vertical, 7)
+                            }
+
                         ForEach(Array(windowModel.panes.enumerated()), id: \.element.id) { idx, pane in
                             PaneTabStrip(
                                 controller: pane.controller,
