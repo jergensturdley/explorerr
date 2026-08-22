@@ -13,6 +13,14 @@ BIN=".build/$CONFIG/Explorerr"
 [ -f "$BIN" ] || BIN=".build/$CONFIG/explorerr"
 cp "$BIN" "$APP/Contents/MacOS/Explorerr"
 cp Resources/Info.plist "$APP/Contents/Info.plist"
+
+# Stamp version (git tag, or override via EXPLORERR_VERSION/EXPLORERR_BUILD)
+VERSION="${EXPLORERR_VERSION:-$(git describe --tags --abbrev=0 2>/dev/null | sed -E 's/^v//' || true)}"
+[ -n "${VERSION:-}" ] || VERSION="1.0"
+BUILD="${EXPLORERR_BUILD:-$(git rev-list --count HEAD 2>/dev/null || echo 1)}"
+/usr/libexec/PlistBuddy -c "Set :CFBundleShortVersionString $VERSION" \
+    -c "Set :CFBundleVersion $BUILD" "$APP/Contents/Info.plist" >/dev/null
+
 printf 'APPL????' > "$APP/Contents/PkgInfo"
 if [ -f Resources/AppIcon.icns ]; then
     cp Resources/AppIcon.icns "$APP/Contents/Resources/AppIcon.icns"

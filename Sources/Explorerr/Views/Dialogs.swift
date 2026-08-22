@@ -269,6 +269,13 @@ struct AboutSheet: View {
     @EnvironmentObject var theme: Theme
     @Environment(\.dismiss) private var dismiss
 
+    private var versionString: String {
+        let info = Bundle.main.infoDictionary ?? [:]
+        let version = info["CFBundleShortVersionString"] as? String ?? "1.0"
+        let build = info["CFBundleVersion"] as? String ?? "1"
+        return "Version \(version) (\(build))"
+    }
+
     var body: some View {
         let p = Win11.palette(theme.scheme)
         VStack(spacing: 14) {
@@ -276,7 +283,7 @@ struct AboutSheet: View {
             Text("Explorerr")
                 .font(.system(size: 20, weight: .bold))
                 .foregroundStyle(p.textPrimary)
-            Text("Version 1.0 (1)")
+            Text(versionString)
                 .font(.system(size: 12))
                 .foregroundStyle(p.textSecondary)
             Text("A Windows 11-style File Explorer for macOS.\nWin11 looks. Win10 ease.")

@@ -1,5 +1,7 @@
 # Explorerr
 
+[![CI](https://github.com/jergensturdley/explorerr/actions/workflows/ci.yml/badge.svg)](https://github.com/jergensturdley/explorerr/actions/workflows/ci.yml)
+
 A Windows 11-style File Explorer for macOS. Native (SwiftUI + AppKit), zero dependencies,
 and it does not need Xcode: Command Line Tools are enough to build it.
 
@@ -58,6 +60,13 @@ fully native macOS app with no Electron, no web views, and no external packages.
 - Details pane with image dimensions and folder statistics
 - Zoomable view density on Command-= / Command-minus / Command-0 (same idea as Finder)
 - Show in Finder, drag out to other apps, fullscreen keys, and standard Mac menus
+
+## Download
+
+Grab the latest DMG from [Releases](https://github.com/jergensturdley/explorerr/releases),
+drag Explorerr to Applications, and open it. The app is ad-hoc signed (no Apple Developer
+ID), so the first launch needs a right-click, Open on newer macOS, or
+System Settings, Privacy & Security, Open Anyway. Requires macOS 13 or newer.
 
 ## Build and run
 

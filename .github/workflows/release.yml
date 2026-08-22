@@ -1,0 +1,75 @@
+name: Release
+
+on:
+  push:
+    tags: ["v*"]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    name: Build and publish release
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Compute version
+        id: ver
+        run: |
+          REF="${GITHUB_REF_NAME}"
+          if [[ "$REF" =~ ^v[0-9]+(\.[0-9]+)* ]]; then
+            VERSION="${REF#v}"
+          else
+            VERSION="0.0.0-dev.${GITHUB_RUN_NUMBER}"
+          fi
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+          echo "is_tag=true" >> "$GITHUB_OUTPUT"
+          if [[ "$GITHUB_REF" != refs/tags/* ]]; then
+            echo "is_tag=false" >> "$GITHUB_OUTPUT"
+          fi
+          echo "Version: $VERSION"
+
+      - name: Build release bundle
+        run: ./scripts/make-app.sh release
+        env:
+          EXPLORERR_VERSION: ${{ steps.ver.outputs.version }}
+          EXPLORERR_BUILD: ${{ github.run_number }}
+
+      - name: Create zip
+        run: |
+          cd build
+          ditto -c -k --keepParent Explorerr.app "Explorerr-${{ steps.ver.outputs.version }}.zip"
+
+      - name: Create dmg
+        run: ./scripts/make-dmg.sh "${{ steps.ver.outputs.version }}"
+
+      - name: Upload artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: Explorerr-${{ steps.ver.outputs.version }}
+          path: |
+            build/Explorerr-*.zip
+            build/Explorerr-*.dmg
+
+      - name: Create GitHub Release
+        if: steps.ver.outputs.is_tag == 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ github.ref_name }}
+          VERSION: ${{ steps.ver.outputs.version }}
+        run: |
+          gh release create "$TAG" \
+            "build/Explorerr-$VERSION.zip" \
+            "build/Explorerr-$VERSION.dmg" \
+            --title "Explorerr $VERSION" \
+            --notes "Windows 11-style File Explorer for macOS. Win11 looks, Win10 ease, OneCommander multi-pane, integrated terminal.
+
+          **Install**
+          1. Download \`Explorerr-$VERSION.dmg\` (or the zip).
+          2. Drag Explorerr to Applications.
+          3. The app is ad-hoc signed (no Apple Developer ID), so the first launch needs
+             a right-click, Open on newer macOS, or System Settings, Privacy & Security, Open Anyway.
+
+          Requires macOS 13 or newer. Full changelog: https://github.com/jergensturdley/explorerr/blob/main/CHANGELOG.md"
