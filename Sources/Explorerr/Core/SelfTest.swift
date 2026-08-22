@@ -3,6 +3,7 @@ import Foundation
 /// Lightweight logic tests runnable via `Explorerr --selftest` (XCTest is unavailable on
 /// Command-Line-Tools-only machines). Exits 0 when everything passes.
 enum SelfTest {
+    @MainActor
     static func run() -> Int32 {
         var failures = 0
         var count = 0
@@ -152,6 +153,55 @@ enum SelfTest {
         // Formatters
         expect(!Fmt.size(1234).isEmpty && Fmt.size(nil).isEmpty, "byte formatting")
         expect(Fmt.counts(folders: 1, files: 3) == "1 folder; 3 files", "counts string")
+
+        // Navigation history: multi-step jumps (address-bar history menu)
+        do {
+            let app = AppModel()
+            let t = TabState(app: app, location: .home)
+            t.navigate(.thisPC)
+            t.navigate(.gallery)
+            t.navigate(.network)
+            t.goBack(steps: 2)
+            expect(t.location == .thisPC && t.historyForward.count == 2, "goBack jumps multiple steps")
+            t.goForward(steps: 2)
+            expect(t.location == .network && t.historyForward.isEmpty, "goForward jumps multiple steps")
+            t.goBack()
+            expect(t.location == .gallery, "single-step back after jumps")
+
+            // Invert selection
+            let a = FSItem(url: URL(fileURLWithPath: "/tmp/a"), fileName: "a", isDirectory: false)
+            let b = FSItem(url: URL(fileURLWithPath: "/tmp/b"), fileName: "b", isDirectory: false)
+            t.items = [a, b]
+            t.selection = [a.id]
+            t.invertSelection()
+            expect(t.selection == [b.id], "invertSelection flips the set")
+
+            // ⇧+arrow range extension
+            let c = FSItem(url: URL(fileURLWithPath: "/tmp/c"), fileName: "c", isDirectory: false)
+            t.items = [a, b, c]
+            t.selection = [a.id]
+            t.anchorIndex = 0
+            t.focusIndex = 0
+            t.extendSelection(delta: 1)
+            t.extendSelection(delta: 1)
+            expect(t.selection.count == 3, "extendSelection grows range")
+            t.extendSelection(delta: -1)
+            expect(t.selection.count == 2 && !t.selection.contains(c.id), "extendSelection shrinks back")
+        }
+
+        // Tab reorder + reopen-closed-tab
+        do {
+            let app = AppModel()
+            let tc = TabController(app: app, locations: [.home, .thisPC, .gallery])
+            let ids = tc.tabs.map { $0.id }
+            tc.moveTab(ids[0], onto: ids[2])
+            expect(tc.tabs.map { $0.location } == [.thisPC, .gallery, .home], "moveTab drags right (after target)")
+            tc.moveTab(ids[0], onto: ids[1])
+            expect(tc.tabs.first?.location == .home, "moveTab drags left (before target)")
+            tc.closeTab(ids[1])
+            tc.reopenClosedTab()
+            expect(tc.tabs.last?.location == .thisPC && tc.activeID == tc.tabs.last?.id, "reopenClosedTab restores the last closed location")
+        }
 
         print(failures == 0 ? "SELFTEST PASSED (\(count) checks)" : "SELFTEST FAILED: \(failures)/\(count)")
         return failures == 0 ? 0 : 1

@@ -1,4 +1,5 @@
 import SwiftUI
+import UniformTypeIdentifiers
 
 // MARK: - Nav tree model
 
@@ -125,6 +126,7 @@ struct NavNodeRow: View {
     @EnvironmentObject var theme: Theme
     @State private var childNodes: [NavNode]? = nil
     @State private var hovering = false
+    @State private var dropTargeted = false
 
     private var expanded: Bool { app.navExpanded.contains(node.id) }
 
@@ -152,11 +154,17 @@ struct NavNodeRow: View {
             .frame(height: 31)
             .background(
                 RoundedRectangle(cornerRadius: 4, style: .continuous)
-                    .fill(selected ? p.selectionBG : hovering ? p.hoverRow : Color.clear)
+                    .fill(selected ? p.selectionBG : (hovering || dropTargeted) ? p.hoverRow : Color.clear)
+            )
+            .overlay(
+                RoundedRectangle(cornerRadius: 4, style: .continuous)
+                    .strokeBorder(dropTargeted ? p.selectionBorder : Color.clear, lineWidth: 1.5)
+                    .allowsHitTesting(false)
             )
             .contentShape(Rectangle())
             .onTapGesture { tab.navigate(node.location) }
             .onHover { hovering = $0 }
+            .modifier(NavFolderDropTarget(node: node, tab: tab, app: app, targeted: $dropTargeted))
             .contextMenu {
                 if case .folder(let url) = node.location {
                     Button(app.isPinned(url.standardizedFileURL.path) ? "Unpin from Quick access" : "Pin to Quick access") {
@@ -270,6 +278,33 @@ struct NavNodeRow: View {
                 }
                 childNodes = nodes.isEmpty ? [] : nodes
             }
+        }
+    }
+}
+
+/// Drop files onto sidebar folders to copy/move them there (Explorer/Dolphin behavior).
+struct NavFolderDropTarget: ViewModifier {
+    let node: NavNode
+    let tab: TabState
+    let app: AppModel
+    @Binding var targeted: Bool
+
+    @ViewBuilder
+    func body(content: Content) -> some View {
+        if case .folder(let dest) = node.location {
+            content.onDrop(of: [UTType.fileURL.identifier], isTargeted: $targeted) { providers in
+                Task {
+                    let urls = await FolderContentView.loadURLs(from: providers)
+                        .filter { $0.standardizedFileURL.path != dest.standardizedFileURL.path }
+                    guard !urls.isEmpty else { return }
+                    let internalDrag = urls.contains { app.draggingURLs.contains($0.path) }
+                    await FileOps.transfer(urls, to: dest, move: internalDrag, app: app, tab: tab)
+                    app.draggingURLs = []
+                }
+                return true
+            }
+        } else {
+            content
         }
     }
 }

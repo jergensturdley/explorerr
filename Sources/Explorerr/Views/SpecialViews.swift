@@ -287,9 +287,7 @@ struct DriveCard: View {
             Divider()
             if drive.isRemovable {
                 Button("Eject") {
-                    Task {
-                        _ = try? await NSWorkspace.shared.unmountAndEjectDevice(at: drive.url)
-                    }
+                    try? NSWorkspace.shared.unmountAndEjectDevice(at: drive.url)
                 }
             }
             Button("Properties") { app.activeSheet = .properties(drive.url) }

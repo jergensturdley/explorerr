@@ -28,6 +28,15 @@ struct ExplorerCommands: Commands {
                 }
                 .keyboardShortcut("w", modifiers: .command)
 
+                Button("Reopen Closed Tab") { paneController?.reopenClosedTab() }
+                    .keyboardShortcut("t", modifiers: [.command, .shift])
+
+                Button("Next Tab") { paneController?.activateAdjacent(1) }
+                    .keyboardShortcut(.tab, modifiers: .control)
+
+                Button("Previous Tab") { paneController?.activateAdjacent(-1) }
+                    .keyboardShortcut(.tab, modifiers: [.control, .shift])
+
                 Divider()
 
                 Button("Open…") {
@@ -94,46 +103,93 @@ struct ExplorerCommands: Commands {
                 }
                 .keyboardShortcut("y", modifiers: .command)
                 .disabled(tab?.selectedItems.contains { !$0.isDirectory } != true)
+
+                Divider()
+
+                Button("Empty Recycle Bin…") { appModel?.activeSheet = .emptyTrash }
+                    .keyboardShortcut(.delete, modifiers: [.command, .shift])
             }
         }
 
-        CommandGroup(after: .newItem) {
-            Divider()
-            Menu("Edit items") {
-                Button("Cut") {
-                    if let tab = tab, let app = appModel { app.cutItems(tab.selectedItems) }
-                }
-                Button("Copy") {
-                    if let tab = tab, let app = appModel { app.copyItems(tab.selectedItems) }
-                }
-                Button("Paste") {
-                    if let tab = tab, let app = appModel, let dir = tab.currentFolderURL {
-                        Task { await FileOps.paste(into: dir, app: app, tab: tab) }
-                    }
-                }
-                Button("Copy as path") {
-                    if let tab = tab {
-                        let paths = tab.selectedItems.map { $0.url.path }.joined(separator: "\n")
-                        let pb = NSPasteboard.general
-                        pb.clearContents()
-                        pb.setString(paths, forType: .string)
-                    }
-                }
-                Divider()
-                Button("Undo") { appModel?.undo() }
-                Button("Redo") { appModel?.redo() }
-                Divider()
-                Button("Rename (F2)") {
-                    if let tab = tab, tab.selection.count == 1 {
-                        tab.renamingID = tab.selection.first
-                    }
-                }
-                Button("Move to Recycle Bin") {
-                    if let tab = tab, let app = appModel, !tab.selectedItems.isEmpty {
-                        Task { await FileOps.deleteItems(tab.selectedItems, app: app) }
-                    }
+        // Real Edit-menu wiring: the advertised ⌘X/⌘C/⌘V/⌘A/⌘Z shortcuts act on files,
+        // falling through to the focused text editor while renaming or editing the path.
+        CommandGroup(replacing: .undoRedo) {
+            Button("Undo") {
+                if let tv = focusedTextView() { tv.undoManager?.undo() }
+                else { appModel?.undo() }
+            }
+            .keyboardShortcut("z", modifiers: .command)
+
+            Button("Redo") {
+                if let tv = focusedTextView() { tv.undoManager?.redo() }
+                else { appModel?.redo() }
+            }
+            .keyboardShortcut("z", modifiers: [.command, .shift])
+        }
+
+        CommandGroup(replacing: .pasteboard) {
+            Button("Cut") {
+                if let tv = focusedTextView() { tv.cut(nil) }
+                else if let tab = tab, let app = appModel { app.cutItems(tab.selectedItems) }
+            }
+            .keyboardShortcut("x", modifiers: .command)
+
+            Button("Copy") {
+                if let tv = focusedTextView() { tv.copy(nil) }
+                else if let tab = tab, let app = appModel { app.copyItems(tab.selectedItems) }
+            }
+            .keyboardShortcut("c", modifiers: .command)
+
+            Button("Paste") {
+                if let tv = focusedTextView() { tv.paste(nil) }
+                else if let tab = tab, let app = appModel, let dir = tab.currentFolderURL {
+                    Task { await FileOps.paste(into: dir, app: app, tab: tab) }
                 }
             }
+            .keyboardShortcut("v", modifiers: .command)
+
+            Button("Copy as Path") {
+                if let tab = tab, !tab.selectedItems.isEmpty {
+                    let paths = tab.selectedItems.map { $0.url.path }.joined(separator: "\n")
+                    let pb = NSPasteboard.general
+                    pb.clearContents()
+                    pb.setString(paths, forType: .string)
+                }
+            }
+            .keyboardShortcut("c", modifiers: [.command, .shift])
+
+            Button("Duplicate") {
+                if let tab = tab, let app = appModel, !tab.selectedItems.isEmpty {
+                    Task { await FileOps.duplicate(tab.selectedItems, app: app) }
+                }
+            }
+            .keyboardShortcut("d", modifiers: .command)
+
+            Divider()
+
+            Button("Select All") {
+                if let tv = focusedTextView() { tv.selectAll(nil) }
+                else { tab?.selectAll() }
+            }
+            .keyboardShortcut("a", modifiers: .command)
+
+            Button("Invert Selection") { tab?.invertSelection() }
+                .keyboardShortcut("a", modifiers: [.command, .shift])
+
+            Divider()
+
+            Button("Rename (F2)") {
+                if let tab = tab, tab.selection.count == 1 {
+                    tab.renamingID = tab.selection.first
+                }
+            }
+
+            Button("Move to Recycle Bin") {
+                if let tab = tab, let app = appModel, !tab.selectedItems.isEmpty {
+                    Task { await FileOps.deleteItems(tab.selectedItems, app: app) }
+                }
+            }
+            .keyboardShortcut(.delete, modifiers: .command)
         }
 
         CommandMenu("View") {
@@ -200,7 +256,7 @@ struct ExplorerCommands: Commands {
                 Button(windowModel?.terminalVisible == true ? "✓ Terminal" : "Terminal (F4)") {
                     windowModel?.terminalVisible.toggle()
                 }
-                .keyboardShortcut("t", modifiers: [.command, .shift])
+                .keyboardShortcut("t", modifiers: [.command, .option])
 
                 Button("Find (search this folder)") {
                     NotificationCenter.default.post(name: .explorerrFocusSearch, object: nil)
@@ -235,8 +291,15 @@ struct ExplorerCommands: Commands {
         CommandMenu("Go") {
             Group {
                 Button("Back") { tab?.goBack() }
+                    .keyboardShortcut("[", modifiers: .command)
                 Button("Forward") { tab?.goForward() }
+                    .keyboardShortcut("]", modifiers: .command)
                 Button("Up to parent folder") { tab?.goUp() }
+                    .keyboardShortcut(.upArrow, modifiers: .command)
+                Button("Open Selection") {
+                    if let tab = tab, let app = appModel { FileOps.openSelection(in: tab, app: app) }
+                }
+                .keyboardShortcut(.downArrow, modifiers: .command)
 
                 Divider()
 
@@ -286,6 +349,12 @@ struct ExplorerCommands: Commands {
     private var appModel: AppModel? {
         // AppModel is shared app-wide; grab it from the focused window's controller
         windowModel?.app
+    }
+
+    /// The focused text editor (rename field, path editor, search), if any — Edit-menu
+    /// shortcuts forward to it instead of acting on files.
+    private func focusedTextView() -> NSTextView? {
+        NSApp.keyWindow?.firstResponder as? NSTextView
     }
 
     private func openPanel() {

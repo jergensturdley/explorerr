@@ -183,21 +183,23 @@ struct AddressBar: View {
 
     private var historyMenu: [WinMenuEntry] {
         var items: [WinMenuEntry] = []
-        let back = tab.historyBack.suffix(6)
+        // Most recent history first; each row jumps the exact number of steps to reach it.
+        let back = Array(tab.historyBack.suffix(6).reversed())
         if !back.isEmpty {
             items.append(.header("Back"))
-            for loc in back.reversed() {
+            for (idx, loc) in back.enumerated() {
                 items.append(.row(.init(label: loc.title, icon: nil) {
-                    tab.goBack()
+                    tab.goBack(steps: idx + 1)
                 }))
             }
         }
-        if !tab.historyForward.isEmpty {
+        let forward = Array(tab.historyForward.suffix(6).reversed())
+        if !forward.isEmpty {
             if !items.isEmpty { items.append(.separator()) }
             items.append(.header("Forward"))
-            for loc in tab.historyForward.prefix(6) {
+            for (idx, loc) in forward.enumerated() {
                 items.append(.row(.init(label: loc.title, icon: nil) {
-                    tab.goForward()
+                    tab.goForward(steps: idx + 1)
                 }))
             }
         }

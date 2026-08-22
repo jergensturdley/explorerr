@@ -1,4 +1,5 @@
 import SwiftUI
+import UniformTypeIdentifiers
 
 /// One pane's tab strip (sits in the window titlebar area, OneCommander-style).
 struct PaneTabStrip: View {
@@ -26,6 +27,8 @@ struct PaneTabStrip: View {
                             controller.closeRight(of: tab.id)
                         } onNewTab: {
                             controller.addTab(.home)
+                        } onReorder: { draggedID in
+                            controller.moveTab(draggedID, onto: tab.id)
                         }
                     }
                 }
@@ -91,10 +94,13 @@ struct TabItemView: View {
     let onCloseOthers: () -> Void
     let onCloseRight: () -> Void
     let onNewTab: () -> Void
+    let onReorder: (UUID) -> Void
 
     @EnvironmentObject var theme: Theme
     @State private var hovering = false
     @State private var closeHover = false
+
+    private static let dragPrefix = "explorerr-tab:"
 
     var body: some View {
         let p = Win11.palette(theme.scheme)
@@ -146,6 +152,17 @@ struct TabItemView: View {
         .contentShape(Rectangle())
         .onTapGesture { onActivate() }
         .onHover { hovering = $0 }
+        // Drag a tab onto another to reorder (within the same pane).
+        .onDrag { NSItemProvider(object: (Self.dragPrefix + tab.id.uuidString) as NSString) }
+        .onDrop(of: [UTType.plainText.identifier], isTargeted: nil) { providers in
+            guard let provider = providers.first, provider.canLoadObject(ofClass: NSString.self) else { return false }
+            _ = provider.loadObject(ofClass: NSString.self) { object, _ in
+                guard let s = object as? String, s.hasPrefix(Self.dragPrefix),
+                      let id = UUID(uuidString: String(s.dropFirst(Self.dragPrefix.count))) else { return }
+                DispatchQueue.main.async { onReorder(id) }
+            }
+            return true
+        }
         .contextMenu {
             Button("New tab") { onNewTab() }
             Button("Duplicate tab") { onDuplicate() }

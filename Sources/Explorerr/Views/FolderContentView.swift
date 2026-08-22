@@ -37,6 +37,10 @@ struct FolderContentView: View {
             }
         }
         .contentShape(Rectangle())
+        .onTapGesture(count: 2) {
+            // Dolphin nicety: double-click empty space goes up one folder
+            if tab.currentFolderURL != nil, !tab.isSearching { tab.goUp() }
+        }
         .onTapGesture { tab.clearSelection() }
         .contextMenu { emptyAreaContextMenu }
         .onDrop(of: [UTType.fileURL.identifier], isTargeted: $dropHover) { providers in
@@ -211,32 +215,72 @@ struct ItemInteractions: ViewModifier {
     let index: Int
     @ObservedObject var tab: TabState
     @ObservedObject var app: AppModel
+    @EnvironmentObject var theme: Theme
+    @State private var dropTargeted = false
+    @State private var lastClickAt = Date.distantPast
 
+    @ViewBuilder
     func body(content: Content) -> some View {
-        content
+        let base = content
             .contentShape(Rectangle())
-            .onTapGesture(count: 2) {
-                if item.isDirectory {
-                    tab.navigate(.folder(item.url))
-                } else {
-                    FileOps.open(item.url, app: app)
-                }
-            }
-            .gesture(TapGesture().modifiers(.shift).onEnded {
-                tab.clickSelect(index: index, item: item, shift: true)
-            })
-            .gesture(TapGesture().modifiers(.command).onEnded {
-                tab.clickSelect(index: index, item: item, command: true)
-            })
+            // One immediate tap recognizer with manual double-click detection: the first
+            // click selects instantly (no double-tap-failure delay), the second click
+            // within the system interval opens. Modifiers are read live from NSEvent.
             .onTapGesture {
-                tab.clickSelect(index: index, item: item)
+                let mods = NSEvent.modifierFlags
+                let now = Date()
+                let isDouble = now.timeIntervalSince(lastClickAt) < NSEvent.doubleClickInterval
+                lastClickAt = now
+                if mods.contains(.shift) {
+                    tab.clickSelect(index: index, item: item, shift: true)
+                } else if mods.contains(.command) {
+                    tab.clickSelect(index: index, item: item, command: true)
+                } else if isDouble {
+                    lastClickAt = .distantPast // a triple click shouldn't re-open
+                    if mods.contains(.option) {
+                        // Windows Alt+double-click → Properties
+                        app.activeSheet = .properties(item.url)
+                    } else if item.isDirectory {
+                        tab.navigate(.folder(item.url))
+                    } else {
+                        FileOps.open(item.url, app: app)
+                    }
+                } else {
+                    tab.clickSelect(index: index, item: item)
+                }
             }
             .contextMenu { itemContextMenu }
             .onDrag {
                 app.draggingURLs = Set(tab.selectedItems.contains(where: { $0.id == item.id }) ? tab.selectedItems.map { $0.url.path } : [item.url.path])
                 return NSItemProvider(contentsOf: item.url) ?? NSItemProvider()
             }
+
+        if item.isDirectory {
+            // Folders are drop targets: drop straight into a subfolder without entering it.
+            base
+                .overlay(
+                    RoundedRectangle(cornerRadius: 4, style: .continuous)
+                        .strokeBorder(dropTargeted ? dropAccent : Color.clear, lineWidth: 1.5)
+                        .allowsHitTesting(false)
+                )
+                .onDrop(of: [UTType.fileURL.identifier], isTargeted: $dropTargeted) { providers in
+                    let dest = item.url
+                    Task {
+                        let urls = await FolderContentView.loadURLs(from: providers)
+                            .filter { $0.standardizedFileURL.path != dest.standardizedFileURL.path }
+                        guard !urls.isEmpty else { return }
+                        let internalDrag = urls.contains { app.draggingURLs.contains($0.path) }
+                        await FileOps.transfer(urls, to: dest, move: internalDrag, app: app, tab: tab)
+                        app.draggingURLs = []
+                    }
+                    return true
+                }
+        } else {
+            base
+        }
     }
+
+    private var dropAccent: Color { Win11.palette(theme.scheme).selectionBorder }
 
     @ViewBuilder
     private var itemContextMenu: some View {

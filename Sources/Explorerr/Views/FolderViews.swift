@@ -7,6 +7,7 @@ struct DetailsView: View {
     @ObservedObject var tab: TabState
     @ObservedObject var app: AppModel
     @EnvironmentObject var theme: Theme
+    @State private var dragStartWidth: CGFloat?
 
     var body: some View {
         let p = Win11.palette(theme.scheme)
@@ -34,23 +35,23 @@ struct DetailsView: View {
 
     // MARK: header
 
+    // Header cells mirror the row cells exactly (same widths + 8pt padding, no extra
+    // divider views in the layout) so column labels line up with the data below them.
     @ViewBuilder
     private func headerRow(_ p: Win11.Palette) -> some View {
         HStack(spacing: 0) {
             headerCell(.name, p, width: nil)
-            staticDivider(p)
-            resizeDivider(p, key: "modified", defaultWidth: 150)
-            headerCell(.modified, p, width: tab.columnWidths["modified"] ?? 150)
-            resizeDivider(p, key: "type", defaultWidth: 150)
-            headerCell(.type, p, width: tab.columnWidths["type"] ?? 150)
-            resizeDivider(p, key: "size", defaultWidth: 96)
-            headerCell(.size, p, width: tab.columnWidths["size"] ?? 96, alignTrailing: true)
+            headerCell(.modified, p, width: tab.columnWidths["modified"] ?? 150, resizeKey: "modified", defaultWidth: 150)
+            headerCell(.type, p, width: tab.columnWidths["type"] ?? 150, resizeKey: "type", defaultWidth: 150)
+            headerCell(.size, p, width: tab.columnWidths["size"] ?? 96, alignTrailing: true, resizeKey: "size", defaultWidth: 96)
         }
         .frame(height: 30)
         .padding(.horizontal, 12)
     }
 
-    private func headerCell(_ key: SortKey, _ p: Win11.Palette, width: CGFloat?, alignTrailing: Bool = false) -> some View {
+    private func headerCell(_ key: SortKey, _ p: Win11.Palette, width: CGFloat?,
+                            alignTrailing: Bool = false, resizeKey: String? = nil,
+                            defaultWidth: CGFloat = 150) -> some View {
         Button {
             tab.toggleSort(key)
         } label: {
@@ -71,6 +72,37 @@ struct DetailsView: View {
         }
         .buttonStyle(.plain)
         .padding(.horizontal, 8)
+        .overlay(alignment: .leading) {
+            // Resize handle floats over the column boundary so it adds no layout width.
+            if let rk = resizeKey {
+                resizeHandle(p, key: rk, defaultWidth: defaultWidth)
+                    .offset(x: -4.5)
+            }
+        }
+    }
+
+    private func resizeHandle(_ p: Win11.Palette, key: String, defaultWidth: CGFloat) -> some View {
+        Rectangle()
+            .fill(Color.clear)
+            .frame(width: 9)
+            .frame(maxHeight: .infinity)
+            .contentShape(Rectangle())
+            .overlay(Rectangle().fill(p.divider).frame(width: 1).padding(.vertical, 6))
+            .onTapGesture(count: 2) { autoFitColumn(key) }
+            .gesture(
+                DragGesture(minimumDistance: 1)
+                    .onChanged { value in
+                        if dragStartWidth == nil { dragStartWidth = tab.columnWidths[key] ?? defaultWidth }
+                        // Columns are right-anchored: dragging right shrinks this column so the
+                        // boundary follows the cursor.
+                        let proposed = (dragStartWidth ?? defaultWidth) - value.translation.width
+                        tab.columnWidths[key] = min(460, max(62, proposed))
+                    }
+                    .onEnded { _ in dragStartWidth = nil }
+            )
+            .onHover { hovering in
+                if hovering { NSCursor.resizeLeftRight.push() } else { NSCursor.pop() }
+            }
     }
 
     /// Dolphin-style double-click on a column divider: auto-fit to contents.
@@ -102,34 +134,6 @@ struct DetailsView: View {
         tab.columnWidths[key] = min(460, max(62, maxWidth + extra))
     }
 
-    private func staticDivider(_ p: Win11.Palette) -> some View {
-        Rectangle()
-            .fill(p.divider)
-            .frame(width: 1, height: 18)
-    }
-
-    private func resizeDivider(_ p: Win11.Palette, key: String, defaultWidth: CGFloat) -> some View {
-        let minWidth: CGFloat = 62
-        return Rectangle()
-            .fill(Color.clear)
-            .frame(width: 8)
-            .contentShape(Rectangle())
-            .overlay(Rectangle().fill(p.divider).frame(width: 1).padding(.vertical, 6))
-            .onTapGesture(count: 2) { autoFitColumn(key) }
-            .gesture(
-                DragGesture(minimumDistance: 1)
-                    .onChanged { value in
-                        let start = tab.columnWidths[key] ?? defaultWidth
-                        let proposed = start + value.translation.width
-                        if proposed >= minWidth {
-                            tab.columnWidths[key] = min(proposed, 460)
-                        }
-                    }
-            )
-            .onHover { hovering in
-                if hovering { NSCursor.resizeLeftRight.push() } else { NSCursor.pop() }
-            }
-    }
 }
 
 struct DetailsRow: View {

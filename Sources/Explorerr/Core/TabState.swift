@@ -14,6 +14,8 @@ final class TabState: ObservableObject, Identifiable {
 
     @Published var selection: Set<String> = []
     var anchorIndex: Int? = nil
+    /// Keyboard focus row for ⇧-arrow range extension (Explorer-style).
+    var focusIndex: Int? = nil
 
     @Published var sortKey: SortKey = .name
     @Published var sortAscending = true
@@ -45,7 +47,7 @@ final class TabState: ObservableObject, Identifiable {
     }
 
     var title: String {
-        if isSearching, let root = searchRoot { return "\(location.title)—\"\(searchText)\"" }
+        if isSearching, searchRoot != nil { return "\(location.title)—\"\(searchText)\"" }
         return location.title
     }
 
@@ -70,6 +72,7 @@ final class TabState: ObservableObject, Identifiable {
         location = to
         selection = []
         anchorIndex = nil
+        focusIndex = nil
         renamingID = nil
         loadTask?.cancel()
         searchTask?.cancel()
@@ -90,16 +93,25 @@ final class TabState: ObservableObject, Identifiable {
         }
     }
 
-    func goBack() {
-        guard let prev = historyBack.popLast() else { return }
-        historyForward.append(location)
-        navigateInternal(prev)
+    /// Go back `steps` history entries (address-bar history menu can jump several at once).
+    func goBack(steps: Int = 1) {
+        var dest: Location? = nil
+        for _ in 0..<max(1, steps) {
+            guard let prev = historyBack.popLast() else { break }
+            historyForward.append(dest ?? location)
+            dest = prev
+        }
+        if let dest { navigateInternal(dest) }
     }
 
-    func goForward() {
-        guard let next = historyForward.popLast() else { return }
-        historyBack.append(location)
-        navigateInternal(next)
+    func goForward(steps: Int = 1) {
+        var dest: Location? = nil
+        for _ in 0..<max(1, steps) {
+            guard let next = historyForward.popLast() else { break }
+            historyBack.append(dest ?? location)
+            dest = next
+        }
+        if let dest { navigateInternal(dest) }
     }
 
     func goUp() {
@@ -299,7 +311,11 @@ final class TabState: ObservableObject, Identifiable {
     var statusSummary: String {
         if isSearching { return "\(sortedItems.count) item\(sortedItems.count == 1 ? "" : "s") found" }
         var s = "\(sortedItems.count) item\(sortedItems.count == 1 ? "" : "s")"
-        if selection.count > 0 { s += "  |  \(selection.count) selected" }
+        if selection.count > 0 {
+            s += "  |  \(selection.count) selected"
+            let bytes = selectedItems.compactMap { $0.sizeBytes }.reduce(0, +)
+            if bytes > 0 { s += " \(Fmt.size(bytes))" }
+        }
         return s
     }
 
@@ -318,14 +334,34 @@ final class TabState: ObservableObject, Identifiable {
             anchorIndex = index
         }
         if !shift { anchorIndex = index }
+        focusIndex = index
         renamingID = nil
+    }
+
+    /// ⇧+arrow: grow/shrink the selection from the anchor toward `delta`.
+    func extendSelection(delta: Int) {
+        let items = sortedItems
+        guard !items.isEmpty else { return }
+        let anchor = anchorIndex ?? focusIndex ?? 0
+        let next = max(0, min(items.count - 1, (focusIndex ?? anchor) + delta))
+        anchorIndex = anchor
+        focusIndex = next
+        let range = min(anchor, next)...max(anchor, next)
+        selection = Set(items[range].map { $0.id })
     }
 
     func selectAll() { selection = Set(sortedItems.map { $0.id }) }
 
+    /// Dolphin/Explorer "Invert selection".
+    func invertSelection() {
+        selection = Set(sortedItems.map { $0.id }).subtracting(selection)
+        anchorIndex = nil
+    }
+
     func clearSelection() {
         selection = []
         anchorIndex = nil
+        focusIndex = nil
     }
 
     func toggleSort(_ key: SortKey) {
@@ -349,6 +385,8 @@ final class TabController: ObservableObject {
     @Published var tabs: [TabState]
     @Published var activeID: UUID
     let app: AppModel
+    /// Locations of recently closed tabs (⌘⇧T reopens, browser-style).
+    private var recentlyClosed: [Location] = []
 
     convenience init(app: AppModel, location: Location) {
         self.init(app: app, locations: [location], activeIndex: 0)
@@ -373,6 +411,7 @@ final class TabController: ObservableObject {
 
     func closeTab(_ id: UUID) {
         guard let idx = tabs.firstIndex(where: { $0.id == id }) else { return }
+        rememberClosed(tabs[idx].location)
         tabs.remove(at: idx)
         if tabs.isEmpty {
             tabs = [TabState(app: app, location: .home)]
@@ -385,6 +424,7 @@ final class TabController: ObservableObject {
 
     func closeOthers(_ id: UUID) {
         guard let keep = tabs.first(where: { $0.id == id }) else { return }
+        for tab in tabs where tab.id != id { rememberClosed(tab.location) }
         tabs = [keep]
         activeID = keep.id
         app.tabsChanged()
@@ -392,8 +432,29 @@ final class TabController: ObservableObject {
 
     func closeRight(of id: UUID) {
         guard let idx = tabs.firstIndex(where: { $0.id == id }), idx < tabs.count - 1 else { return }
+        for tab in tabs[(idx + 1)...] { rememberClosed(tab.location) }
         tabs.removeSubrange((idx + 1)...)
         if !tabs.contains(where: { $0.id == activeID }) { activeID = tabs[idx].id }
+        app.tabsChanged()
+    }
+
+    private func rememberClosed(_ location: Location) {
+        recentlyClosed.append(location)
+        if recentlyClosed.count > 10 { recentlyClosed.removeFirst() }
+    }
+
+    func reopenClosedTab() {
+        guard let loc = recentlyClosed.popLast() else { return }
+        addTab(loc)
+    }
+
+    /// Drag-reorder: drop tab `id` onto `targetID` (after it when dragging right, before when left).
+    func moveTab(_ id: UUID, onto targetID: UUID) {
+        guard id != targetID,
+              let from = tabs.firstIndex(where: { $0.id == id }),
+              let to = tabs.firstIndex(where: { $0.id == targetID }) else { return }
+        let moving = tabs.remove(at: from)
+        tabs.insert(moving, at: to)
         app.tabsChanged()
     }
 
@@ -412,6 +473,13 @@ final class TabController: ObservableObject {
     func activate(_ id: UUID) {
         guard tabs.contains(where: { $0.id == id }) else { return }
         activeID = id
+        app.tabsChanged()
+    }
+
+    /// Ctrl+Tab-style cycling.
+    func activateAdjacent(_ advance: Int) {
+        guard tabs.count > 1, let idx = tabs.firstIndex(where: { $0.id == activeID }) else { return }
+        activeID = tabs[(idx + advance + tabs.count) % tabs.count].id
         app.tabsChanged()
     }
 }

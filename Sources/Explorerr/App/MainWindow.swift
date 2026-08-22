@@ -1,5 +1,6 @@
 import SwiftUI
 import AppKit
+import Quartz
 
 // Top-left-only rounded corner for the Win11 content card
 struct TopLeftRoundedShape: Shape {
@@ -32,6 +33,8 @@ struct MainWindow: View {
 
     @State private var keyMonitor: Any?
     @State private var mouseMonitor: Any?
+    @State private var typeAheadBuffer = ""
+    @State private var typeAheadAt = Date.distantPast
 
     private let splitterWidth: CGFloat = 5
 
@@ -101,14 +104,17 @@ struct MainWindow: View {
                             }
 
                         ForEach(Array(windowModel.panes.enumerated()), id: \.element.id) { idx, pane in
+                            let isLast = idx == windowModel.panes.count - 1
                             PaneTabStrip(
                                 controller: pane.controller,
                                 isPaneActive: pane.id == windowModel.activePaneID,
-                                isLastPane: idx == windowModel.panes.count - 1
+                                isLastPane: isLast
                             )
-                            .frame(width: sizes.paneWidths[idx])
+                            // The last strip gives up room for the caption buttons so the
+                            // whole row fits the window instead of overflowing off-screen.
+                            .frame(width: isLast ? max(60, sizes.paneWidths[idx] - windowControlsReserve) : sizes.paneWidths[idx])
                             .overlay(alignment: .trailing) {
-                                if idx < windowModel.panes.count - 1 {
+                                if !isLast {
                                     Rectangle().fill(themeDivider).frame(width: 1).padding(.vertical, 7)
                                 }
                             }
@@ -168,6 +174,9 @@ struct MainWindow: View {
     }
 
     private var themeDivider: Color { Win11.palette(theme.scheme).divider }
+
+    /// Width the caption buttons need at the trailing end of the titlebar row (3 × 46 + spacer).
+    private let windowControlsReserve: CGFloat = 142
 
     /// Pane column widths from the weight distribution.
     private func paneSizes(total: CGFloat) -> (paneWidths: [CGFloat], available: CGFloat) {
@@ -288,15 +297,21 @@ struct MainWindow: View {
     private func installMonitors() {
         guard keyMonitor == nil else { return }
 
-        // Activate the pane the user clicks into
+        // Activate the pane the user clicks into + mouse back/forward buttons (Windows mice)
         mouseMonitor = NSEvent.addLocalMonitorForEvents(matching: [.leftMouseDown, .rightMouseDown, .otherMouseDown]) { [weak windowModel] event in
-            guard let model = windowModel, model.panes.count > 1, let window = event.window else { return event }
-            let point = event.locationInWindow
-            for pane in model.panes {
-                if let frame = model.paneFrames[pane.id], frame.contains(point) {
-                    model.activate(paneID: pane.id)
-                    break
+            guard let model = windowModel, event.window != nil else { return event }
+            if model.panes.count > 1 {
+                let point = event.locationInWindow
+                for pane in model.panes {
+                    if let frame = model.paneFrames[pane.id], frame.contains(point) {
+                        model.activate(paneID: pane.id)
+                        break
+                    }
                 }
+            }
+            if event.type == .otherMouseDown {
+                if event.buttonNumber == 3 { model.activeTab.goBack(); return nil }
+                if event.buttonNumber == 4 { model.activeTab.goForward(); return nil }
             }
             return event
         }
@@ -308,10 +323,19 @@ struct MainWindow: View {
             // Don't interfere with text editing (rename, path editor, search)
             if NSApp.keyWindow?.firstResponder is NSTextView { return event }
 
-            // Close open dropdown menus with Escape
+            // Escape: close dropdowns, then cancel search, then clear selection (Explorer order)
             if event.keyCode == 53 {
                 if app.menuCoordinator.request != nil {
                     app.menuCoordinator.dismiss()
+                    return nil
+                }
+                if event.window is QLPreviewPanel { return event }
+                if tab.isSearching {
+                    tab.clearSearch()
+                    return nil
+                }
+                if !tab.selection.isEmpty {
+                    tab.clearSelection()
                     return nil
                 }
                 return event
@@ -332,28 +356,37 @@ struct MainWindow: View {
                 }
             }
 
+            // ⇧+arrows extend the selection from the anchor (Explorer/Finder)
+            if mods.contains(.shift) {
+                switch event.keyCode {
+                case 125: tab.extendSelection(delta: 1); return nil
+                case 126: tab.extendSelection(delta: -1); return nil
+                default: break
+                }
+            }
+
             switch event.keyCode {
-            case 122: // F2 rename
+            case 120: // F2 rename
                 if tab.selection.count == 1, let id = tab.selection.first {
                     tab.renamingID = id
                     return nil
                 }
                 return event
-            case 96, 97: // F5: refresh — or "copy to other pane" in multi-pane (commander keys)
+            case 96: // F5: refresh — or "copy to other pane" in multi-pane (commander keys)
                 if model.panes.count > 1 {
                     if transferToOtherPane(move: false, model: model, app: app) { return nil }
                     return event
                 }
                 tab.reload()
                 return nil
-            case 96 + 1: // F6? keyCode 97 handled above; keep distinct case for clarity
-                return event
-            case 97: return event
-            case 118: // F6 move to other pane (multi-pane)
-                if model.panes.count > 1 {
-                    if transferToOtherPane(move: true, model: model, app: app) { return nil }
+            case 97: // F6: move to other pane (multi-pane commander)
+                if model.panes.count > 1, transferToOtherPane(move: true, model: model, app: app) {
+                    return nil
                 }
                 return event
+            case 118: // F4 → toggle the integrated terminal (Dolphin)
+                model.terminalVisible.toggle()
+                return nil
             case 51: // Backspace (delete key on Mac keyboards)
                 if mods.contains(.shift) || mods.contains(.command) {
                     let items = tab.selectedItems
@@ -396,19 +429,66 @@ struct MainWindow: View {
                     return nil
                 }
                 return event
-            case 118: // F4 → toggle the integrated terminal (Dolphin)
-                model.terminalVisible.toggle()
-                return nil
             case 125: // Arrow down
                 moveSelection(tab, delta: 1)
                 return nil
             case 126: // Arrow up
                 moveSelection(tab, delta: -1)
                 return nil
+            case 115: // Home → first item
+                moveSelection(tab, delta: .min)
+                return nil
+            case 119: // End → last item
+                moveSelection(tab, delta: .max)
+                return nil
+            case 116: // Page Up
+                moveSelection(tab, delta: -15)
+                return nil
+            case 121: // Page Down
+                moveSelection(tab, delta: 15)
+                return nil
             default:
+                // Type-ahead: typing letters/digits jumps to the matching item (Explorer/Finder/Dolphin)
+                if handleTypeAhead(event, tab: tab, mods: mods) { return nil }
                 return event
             }
         }
+    }
+
+    // MARK: type-ahead ("type to select")
+
+    private func handleTypeAhead(_ event: NSEvent, tab: TabState, mods: NSEvent.ModifierFlags) -> Bool {
+        guard mods.subtracting(.shift).isEmpty,
+              let chars = event.charactersIgnoringModifiers, !chars.isEmpty,
+              let scalar = chars.unicodeScalars.first,
+              scalar.value >= 0x20, scalar.value < 0xF700,   // printable, not a function key
+              !tab.sortedItems.isEmpty
+        else { return false }
+
+        let now = Date()
+        if now.timeIntervalSince(typeAheadAt) > 0.9 { typeAheadBuffer = "" }
+        typeAheadAt = now
+        typeAheadBuffer += chars.lowercased()
+
+        let items = tab.sortedItems
+        // Repeating one letter cycles through its matches; otherwise prefix-match from the top.
+        let cycling = typeAheadBuffer.count > 1 && Set(typeAheadBuffer).count == 1
+        let needle = cycling ? String(typeAheadBuffer.first!) : typeAheadBuffer
+        var start = 0
+        if cycling, tab.selection.count == 1, let id = tab.selection.first,
+           let idx = items.firstIndex(where: { $0.id == id }) {
+            start = idx + 1
+        }
+        for offset in 0..<items.count {
+            let idx = (start + offset) % items.count
+            if items[idx].displayName.lowercased().hasPrefix(needle) {
+                tab.selection = [items[idx].id]
+                tab.anchorIndex = idx
+                tab.focusIndex = idx
+                return true
+            }
+        }
+        return true // consume even without a match, like Explorer
     }
 
     /// F5/F6 commander action: copy/move selection to the other pane's folder.
@@ -426,19 +506,28 @@ struct MainWindow: View {
         return true
     }
 
+    /// Move the single selection by `delta` rows; `.min`/`.max` jump to first/last (Home/End).
     private func moveSelection(_ tab: TabState, delta: Int) {
         let items = tab.sortedItems
         guard !items.isEmpty else { return }
-        let current: Int
-        if tab.selection.count == 1, let id = tab.selection.first,
-           let idx = items.firstIndex(where: { $0.id == id }) {
-            current = idx
+        let next: Int
+        if delta == .min {
+            next = 0
+        } else if delta == .max {
+            next = items.count - 1
         } else {
-            current = delta > 0 ? -1 : 0
+            let current: Int
+            if tab.selection.count == 1, let id = tab.selection.first,
+               let idx = items.firstIndex(where: { $0.id == id }) {
+                current = idx
+            } else {
+                current = delta > 0 ? -1 : 0
+            }
+            next = max(0, min(items.count - 1, current + delta))
         }
-        let next = max(0, min(items.count - 1, current + delta))
         tab.selection = [items[next].id]
         tab.anchorIndex = next
+        tab.focusIndex = next
     }
 
     private func removeMonitors() {
