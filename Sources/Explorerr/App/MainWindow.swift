@@ -359,8 +359,16 @@ struct MainWindow: View {
             // ⇧+arrows extend the selection from the anchor (Explorer/Finder)
             if mods.contains(.shift) {
                 switch event.keyCode {
-                case 125: tab.extendSelection(delta: 1); return nil
-                case 126: tab.extendSelection(delta: -1); return nil
+                case 123: if arrowMove(tab, .left, extend: true) { return nil }; return event
+                case 124: if arrowMove(tab, .right, extend: true) { return nil }; return event
+                case 125:
+                    if arrowMove(tab, .down, extend: true) { return nil }
+                    tab.extendSelection(delta: 1)
+                    return nil
+                case 126:
+                    if arrowMove(tab, .up, extend: true) { return nil }
+                    tab.extendSelection(delta: -1)
+                    return nil
                 default: break
                 }
             }
@@ -429,10 +437,18 @@ struct MainWindow: View {
                     return nil
                 }
                 return event
+            case 123: // Arrow left (grids/list: spatial; details: no-op)
+                if arrowMove(tab, .left) { return nil }
+                return event
+            case 124: // Arrow right
+                if arrowMove(tab, .right) { return nil }
+                return event
             case 125: // Arrow down
+                if arrowMove(tab, .down) { return nil }
                 moveSelection(tab, delta: 1)
                 return nil
             case 126: // Arrow up
+                if arrowMove(tab, .up) { return nil }
                 moveSelection(tab, delta: -1)
                 return nil
             case 115: // Home → first item
@@ -504,6 +520,59 @@ struct MainWindow: View {
             await FileOps.transfer(items.map { $0.url }, to: dest, move: move, app: app, tab: tab)
         }
         return true
+    }
+
+    // MARK: spatial arrow navigation (grid-aware, uses the frames BandSelectable reports)
+
+    /// Returns true when the event was handled (including a boundary no-op).
+    /// Returns false only when spatial data is unavailable — callers fall back to
+    /// linear movement (↑/↓) or pass the event through (←/→).
+    private func arrowMove(_ tab: TabState, _ direction: BandSelect.Direction, extend: Bool = false) -> Bool {
+        let items = tab.sortedItems
+        guard !items.isEmpty else { return false }
+
+        func apply(_ idx: Int) {
+            if extend {
+                tab.extendSelection(to: idx)
+            } else {
+                tab.selection = [items[idx].id]
+                tab.anchorIndex = idx
+                tab.focusIndex = idx
+            }
+        }
+
+        // Nothing focused yet: ↓/→ start at the first item, ↑/← at the last (Explorer).
+        guard let currentIdx = focusedIndex(tab, items: items) else {
+            apply(direction == .down || direction == .right ? 0 : items.count - 1)
+            return true
+        }
+
+        let currentID = items[currentIdx].id
+        guard tab.itemFrames[currentID] != nil else { return false }
+
+        if let targetID = BandSelect.spatialMove(from: currentID, frames: tab.itemFrames, direction: direction),
+           let targetIdx = items.firstIndex(where: { $0.id == targetID }) {
+            apply(targetIdx)
+            return true
+        }
+
+        // Boundary. Grid views wrap ←/→ linearly onto the previous/next row (Explorer).
+        if tab.viewMode.isGrid, direction == .left || direction == .right {
+            let next = currentIdx + (direction == .right ? 1 : -1)
+            if items.indices.contains(next) {
+                apply(next)
+                return true
+            }
+        }
+        return true // edge of the layout: consume without moving
+    }
+
+    private func focusedIndex(_ tab: TabState, items: [FSItem]) -> Int? {
+        if let f = tab.focusIndex, items.indices.contains(f) { return f }
+        if tab.selection.count == 1, let id = tab.selection.first {
+            return items.firstIndex { $0.id == id }
+        }
+        return nil
     }
 
     /// Move the single selection by `delta` rows; `.min`/`.max` jump to first/last (Home/End).

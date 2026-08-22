@@ -19,6 +19,35 @@ enum BandSelect {
     static func hits(frames: [String: CGRect], rect: CGRect) -> Set<String> {
         Set(frames.filter { $0.value.intersects(rect) }.keys)
     }
+
+    // MARK: spatial arrow navigation (grid-aware, driven by the same reported frames)
+
+    enum Direction { case up, down, left, right }
+
+    /// Nearest item in `direction` from `id`: minimal travel along the axis (within a
+    /// tolerance bucket, so a whole grid row competes), then minimal cross-axis offset.
+    /// nil when `id` has no frame or nothing lies in that direction (boundary).
+    static func spatialMove(from id: String, frames: [String: CGRect], direction: Direction) -> String? {
+        guard let c = frames[id] else { return nil }
+        var candidates: [(id: String, primary: CGFloat, secondary: CGFloat)] = []
+        for (fid, f) in frames where fid != id {
+            let dx = f.midX - c.midX
+            let dy = f.midY - c.midY
+            switch direction {
+            case .down: if dy > 0.5 { candidates.append((fid, dy, abs(dx))) }
+            case .up: if dy < -0.5 { candidates.append((fid, -dy, abs(dx))) }
+            case .right: if dx > 0.5 { candidates.append((fid, dx, abs(dy))) }
+            case .left: if dx < -0.5 { candidates.append((fid, -dx, abs(dy))) }
+            }
+        }
+        guard let minPrimary = candidates.map({ $0.primary }).min() else { return nil }
+        let vertical = direction == .up || direction == .down
+        let tolerance = (vertical ? c.height : c.width) * 0.6
+        return candidates
+            .filter { $0.primary <= minPrimary + tolerance }
+            .min { $0.secondary != $1.secondary ? $0.secondary < $1.secondary : $0.primary < $1.primary }?
+            .id
+    }
 }
 
 struct BandFramesKey: PreferenceKey {
@@ -55,7 +84,10 @@ struct BandSelectable: ViewModifier {
     func body(content: Content) -> some View {
         content
             .coordinateSpace(name: bandSpace)
-            .onPreferenceChange(BandFramesKey.self) { frames = $0 }
+            .onPreferenceChange(BandFramesKey.self) {
+                frames = $0
+                tab.itemFrames = $0   // shared with keyboard spatial navigation
+            }
             .background(catcher)
             .overlay(alignment: .topLeading) { bandOverlay }
     }

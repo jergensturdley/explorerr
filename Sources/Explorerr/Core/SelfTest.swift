@@ -202,6 +202,25 @@ enum SelfTest {
             expect(BandSelect.hits(frames: frames, rect: CGRect(x: 500, y: 500, width: 10, height: 10)).isEmpty, "band misses everything cleanly")
         }
 
+        // Spatial arrow navigation over a 3×2 grid of frames
+        do {
+            func cell(_ col: Int, _ row: Int) -> CGRect {
+                CGRect(x: CGFloat(col) * 110, y: CGFloat(row) * 90, width: 100, height: 80)
+            }
+            let grid: [String: CGRect] = [
+                "a": cell(0, 0), "b": cell(1, 0), "c": cell(2, 0),
+                "d": cell(0, 1), "e": cell(1, 1), "f": cell(2, 1),
+            ]
+            expect(BandSelect.spatialMove(from: "b", frames: grid, direction: .down) == "e", "grid ↓ lands directly below")
+            expect(BandSelect.spatialMove(from: "e", frames: grid, direction: .up) == "b", "grid ↑ lands directly above")
+            expect(BandSelect.spatialMove(from: "b", frames: grid, direction: .right) == "c", "grid → moves within the row")
+            expect(BandSelect.spatialMove(from: "b", frames: grid, direction: .left) == "a", "grid ← moves within the row")
+            expect(BandSelect.spatialMove(from: "e", frames: grid, direction: .down) == nil, "grid ↓ stops at the bottom edge")
+            expect(BandSelect.spatialMove(from: "c", frames: grid, direction: .right) == nil, "grid → stops at the row edge")
+            expect(BandSelect.spatialMove(from: "a", frames: grid, direction: .down) == "d", "grid ↓ prefers same column over diagonal")
+            expect(BandSelect.spatialMove(from: "missing", frames: grid, direction: .down) == nil, "unknown item yields nil")
+        }
+
         // Tab reorder + reopen-closed-tab
         do {
             let app = AppModel()

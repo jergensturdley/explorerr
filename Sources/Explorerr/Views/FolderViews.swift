@@ -329,23 +329,31 @@ struct ListView: View {
         GeometryReader { geo in
             let rowsPerColumn = max(1, Int(geo.size.height / 28))
             ScrollView(.horizontal, showsIndicators: true) {
-                HStack(alignment: .top, spacing: 28) {
-                    let chunks = stride(from: 0, to: tab.sortedItems.count, by: rowsPerColumn).map {
-                        Array(tab.sortedItems[$0..<min($0 + rowsPerColumn, tab.sortedItems.count)])
-                    }
-                    ForEach(Array(chunks.enumerated()), id: \.offset) { chunkIndex, chunk in
-                        VStack(spacing: 0) {
-                            ForEach(Array(chunk.enumerated()), id: \.element.id) { localIndex, item in
-                                ListRow(item: item, index: chunkIndex * rowsPerColumn + localIndex, tab: tab, app: app)
-                                    .modifier(ReportsBandFrame(id: item.id))
-                            }
+                ScrollViewReader { proxy in
+                    HStack(alignment: .top, spacing: 28) {
+                        let chunks = stride(from: 0, to: tab.sortedItems.count, by: rowsPerColumn).map {
+                            Array(tab.sortedItems[$0..<min($0 + rowsPerColumn, tab.sortedItems.count)])
                         }
-                        .frame(width: 240, alignment: .leading)
+                        ForEach(Array(chunks.enumerated()), id: \.offset) { chunkIndex, chunk in
+                            VStack(spacing: 0) {
+                                ForEach(Array(chunk.enumerated()), id: \.element.id) { localIndex, item in
+                                    ListRow(item: item, index: chunkIndex * rowsPerColumn + localIndex, tab: tab, app: app)
+                                        .id(item.id)
+                                        .modifier(ReportsBandFrame(id: item.id))
+                                }
+                            }
+                            .frame(width: 240, alignment: .leading)
+                        }
+                    }
+                    .padding(10)
+                    .frame(minWidth: geo.size.width, minHeight: geo.size.height, alignment: .topLeading)
+                    .modifier(BandSelectable(tab: tab))
+                    .onChange(of: tab.selection) { sel in
+                        if !tab.isBandSelecting, sel.count == 1, let id = sel.first {
+                            proxy.scrollTo(id)
+                        }
                     }
                 }
-                .padding(10)
-                .frame(minWidth: geo.size.width, minHeight: geo.size.height, alignment: .topLeading)
-                .modifier(BandSelectable(tab: tab))
             }
         }
     }
@@ -392,14 +400,22 @@ struct TilesView: View {
 
     var body: some View {
         ScrollView(.vertical, showsIndicators: true) {
-            LazyVGrid(columns: [GridItem(.adaptive(minimum: 300), spacing: 8)], spacing: 6) {
-                ForEach(Array(tab.sortedItems.enumerated()), id: \.element.id) { index, item in
-                    TileView(item: item, index: index, tab: tab, app: app)
-                        .modifier(ReportsBandFrame(id: item.id))
+            ScrollViewReader { proxy in
+                LazyVGrid(columns: [GridItem(.adaptive(minimum: 300), spacing: 8)], spacing: 6) {
+                    ForEach(Array(tab.sortedItems.enumerated()), id: \.element.id) { index, item in
+                        TileView(item: item, index: index, tab: tab, app: app)
+                            .id(item.id)
+                            .modifier(ReportsBandFrame(id: item.id))
+                    }
+                }
+                .padding(10)
+                .modifier(BandSelectable(tab: tab))
+                .onChange(of: tab.selection) { sel in
+                    if !tab.isBandSelecting, sel.count == 1, let id = sel.first {
+                        proxy.scrollTo(id)
+                    }
                 }
             }
-            .padding(10)
-            .modifier(BandSelectable(tab: tab))
         }
     }
 }

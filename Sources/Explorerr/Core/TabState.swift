@@ -18,6 +18,9 @@ final class TabState: ObservableObject, Identifiable {
     var focusIndex: Int? = nil
     /// True while a rubber-band drag is updating the selection (suppresses auto-scroll).
     var isBandSelecting = false
+    /// Frames of the currently laid-out items (content space), fed by BandSelectable.
+    /// Used for grid-aware arrow-key navigation.
+    var itemFrames: [String: CGRect] = [:]
 
     @Published var sortKey: SortKey = .name
     @Published var sortAscending = true
@@ -345,7 +348,15 @@ final class TabState: ObservableObject, Identifiable {
         let items = sortedItems
         guard !items.isEmpty else { return }
         let anchor = anchorIndex ?? focusIndex ?? 0
-        let next = max(0, min(items.count - 1, (focusIndex ?? anchor) + delta))
+        extendSelection(to: max(0, min(items.count - 1, (focusIndex ?? anchor) + delta)))
+    }
+
+    /// ⇧+arrow to an absolute row (spatial grid navigation): selects the index range
+    /// between the anchor and `next`, Explorer-style.
+    func extendSelection(to next: Int) {
+        let items = sortedItems
+        guard items.indices.contains(next) else { return }
+        let anchor = anchorIndex ?? focusIndex ?? next
         anchorIndex = anchor
         focusIndex = next
         let range = min(anchor, next)...max(anchor, next)
