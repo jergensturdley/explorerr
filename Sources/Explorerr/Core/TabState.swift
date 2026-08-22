@@ -16,6 +16,8 @@ final class TabState: ObservableObject, Identifiable {
     var anchorIndex: Int? = nil
     /// Keyboard focus row for ⇧-arrow range extension (Explorer-style).
     var focusIndex: Int? = nil
+    /// True while a rubber-band drag is updating the selection (suppresses auto-scroll).
+    var isBandSelecting = false
 
     @Published var sortKey: SortKey = .name
     @Published var sortAscending = true

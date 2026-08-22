@@ -189,6 +189,19 @@ enum SelfTest {
             expect(t.selection.count == 2 && !t.selection.contains(c.id), "extendSelection shrinks back")
         }
 
+        // Rubber-band selection math
+        do {
+            let r = BandSelect.rect(from: CGPoint(x: 100, y: 80), to: CGPoint(x: 20, y: 10))
+            expect(r == CGRect(x: 20, y: 10, width: 80, height: 70), "band rect normalizes any drag direction")
+            let frames: [String: CGRect] = [
+                "a": CGRect(x: 0, y: 0, width: 50, height: 20),     // overlaps corner
+                "b": CGRect(x: 30, y: 40, width: 40, height: 20),   // fully inside
+                "c": CGRect(x: 200, y: 200, width: 40, height: 20), // outside
+            ]
+            expect(BandSelect.hits(frames: frames, rect: r) == ["a", "b"], "band hits intersecting frames only")
+            expect(BandSelect.hits(frames: frames, rect: CGRect(x: 500, y: 500, width: 10, height: 10)).isEmpty, "band misses everything cleanly")
+        }
+
         // Tab reorder + reopen-closed-tab
         do {
             let app = AppModel()

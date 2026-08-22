@@ -329,9 +329,11 @@ struct GalleryView: View {
                         ForEach(Array(photos.enumerated()), id: \.element.id) { index, photo in
                             ThumbnailView(item: photo, size: 148, cornerRadius: 8)
                                 .modifier(ItemInteractions(item: photo, index: index, tab: tab, app: app))
+                                .modifier(ReportsBandFrame(id: photo.id))
                         }
                     }
                     .padding(12)
+                    .modifier(BandSelectable(tab: tab))
                 }
             }
         }

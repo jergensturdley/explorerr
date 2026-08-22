@@ -20,14 +20,18 @@ struct DetailsView: View {
                         ForEach(Array(tab.sortedItems.enumerated()), id: \.element.id) { index, item in
                             DetailsRow(item: item, index: index, tab: tab, app: app, p: p)
                                 .id(item.id)
+                                .modifier(ReportsBandFrame(id: item.id))
                         }
                     }
                     Color.clear.frame(height: 400).allowsHitTesting(false) // bottom padding + click space
                 }
+                .modifier(BandSelectable(tab: tab))
             }
             .onChange(of: tab.selection) { sel in
-                if sel.count == 1, let id = sel.first {
-                    proxy.scrollTo(id, anchor: .center)
+                // Minimal reveal (nil anchor): no jump when the row is already visible,
+                // and never during a rubber-band drag.
+                if !tab.isBandSelecting, sel.count == 1, let id = sel.first {
+                    proxy.scrollTo(id)
                 }
             }
         }
@@ -239,12 +243,14 @@ struct IconsGridView: View {
                     ForEach(Array(tab.sortedItems.enumerated()), id: \.element.id) { index, item in
                         IconTile(item: item, index: index, tab: tab, app: app, iconSize: iconSize)
                             .id(item.id)
+                            .modifier(ReportsBandFrame(id: item.id))
                     }
                 }
                 .padding(12)
+                .modifier(BandSelectable(tab: tab))
                 .onChange(of: tab.selection) { sel in
-                    if sel.count == 1, let id = sel.first {
-                        proxy.scrollTo(id, anchor: .center)
+                    if !tab.isBandSelecting, sel.count == 1, let id = sel.first {
+                        proxy.scrollTo(id)
                     }
                 }
             }
@@ -331,12 +337,15 @@ struct ListView: View {
                         VStack(spacing: 0) {
                             ForEach(Array(chunk.enumerated()), id: \.element.id) { localIndex, item in
                                 ListRow(item: item, index: chunkIndex * rowsPerColumn + localIndex, tab: tab, app: app)
+                                    .modifier(ReportsBandFrame(id: item.id))
                             }
                         }
                         .frame(width: 240, alignment: .leading)
                     }
                 }
                 .padding(10)
+                .frame(minWidth: geo.size.width, minHeight: geo.size.height, alignment: .topLeading)
+                .modifier(BandSelectable(tab: tab))
             }
         }
     }
@@ -386,9 +395,11 @@ struct TilesView: View {
             LazyVGrid(columns: [GridItem(.adaptive(minimum: 300), spacing: 8)], spacing: 6) {
                 ForEach(Array(tab.sortedItems.enumerated()), id: \.element.id) { index, item in
                     TileView(item: item, index: index, tab: tab, app: app)
+                        .modifier(ReportsBandFrame(id: item.id))
                 }
             }
             .padding(10)
+            .modifier(BandSelectable(tab: tab))
         }
     }
 }

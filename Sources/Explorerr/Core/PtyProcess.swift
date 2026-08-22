@@ -62,7 +62,7 @@ final class PtyProcess {
             setsid()
             let slave = open(slaveNameCString, O_RDWR)
             if slave >= 0 {
-                ioctl(slave, TIOCSCTTY, 0)
+                _ = ioctl(slave, TIOCSCTTY, 0)
                 dup2(slave, 0); dup2(slave, 1); dup2(slave, 2)
                 if slave > 2 { close(slave) }
             }

@@ -285,10 +285,10 @@ final class AppModel: ObservableObject {
     /// Called whenever pane layouts change so windows persist their sessions.
     func layoutChanged() {
         sessionTask?.cancel()
-        sessionTask = Task { [weak self] in
+        sessionTask = Task {
             try? await Task.sleep(nanoseconds: 400_000_000)
-            guard let self, !Task.isCancelled else { return }
-            for case let window as WindowModel in Self.windowRegistry.allObjects {
+            guard !Task.isCancelled else { return }
+            for window in Self.windowRegistry.allObjects {
                 window.saveSession()
             }
         }
@@ -296,7 +296,7 @@ final class AppModel: ObservableObject {
 
     /// Reload every tab in every window (used when global prefs change).
     func reloadAllTabs() {
-        for case let window as WindowModel in Self.windowRegistry.allObjects {
+        for window in Self.windowRegistry.allObjects {
             for pane in window.panes {
                 for tab in pane.controller.tabs { tab.reload() }
             }
@@ -306,7 +306,7 @@ final class AppModel: ObservableObject {
     /// Reload any tab currently displaying one of these folders.
     func foldersChanged(_ urls: [URL]) {
         let paths = Set(urls.map { $0.standardizedFileURL.path })
-        for case let window as WindowModel in Self.windowRegistry.allObjects {
+        for window in Self.windowRegistry.allObjects {
             for pane in window.panes {
                 for tab in pane.controller.tabs {
                     if let folder = tab.location.folderURL, paths.contains(folder.standardizedFileURL.path) {
