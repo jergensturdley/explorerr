@@ -24,6 +24,8 @@ jobs:
           else
             VERSION="0.0.0-dev.${GITHUB_RUN_NUMBER}"
           fi
+          # Sanitize: the version is interpolated into later run: steps and filenames
+          VERSION="$(printf '%s' "$VERSION" | tr -cd '0-9A-Za-z.-')"
           echo "version=$VERSION" >> "$GITHUB_OUTPUT"
           echo "is_tag=true" >> "$GITHUB_OUTPUT"
           if [[ "$GITHUB_REF" != refs/tags/* ]]; then
@@ -44,6 +46,11 @@ jobs:
 
       - name: Create dmg
         run: ./scripts/make-dmg.sh "${{ steps.ver.outputs.version }}"
+        env:
+          EXPLORERR_BUILD: ${{ github.run_number }}
+
+      - name: Verify dmg
+        run: hdiutil verify build/Explorerr-*.dmg
 
       - name: Upload artifacts
         uses: actions/upload-artifact@v4

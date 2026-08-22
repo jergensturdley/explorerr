@@ -18,14 +18,25 @@ jobs:
       - name: Build
         run: swift build
 
-      - name: Selftest (30 logic checks)
+      - name: Selftest
         run: .build/debug/Explorerr --selftest
 
-      - name: Bundle app
-        run: ./scripts/make-app.sh release
+      - name: Build DMG
+        id: dmg
+        run: |
+          VERSION="0.0.0-ci.${GITHUB_RUN_NUMBER}"
+          ./scripts/make-dmg.sh "$VERSION"
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+          hdiutil verify "build/Explorerr-$VERSION.dmg"
 
       - name: Upload app artifact
         uses: actions/upload-artifact@v4
         with:
           name: Explorerr-app
           path: build/Explorerr.app
+
+      - name: Upload DMG artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: Explorerr-dmg
+          path: build/Explorerr-${{ steps.dmg.outputs.version }}.dmg

@@ -8,7 +8,9 @@ if [ -z "$VERSION" ]; then
     VERSION="$(git describe --tags --abbrev=0 2>/dev/null | sed -E 's/^v//' || echo "1.0")"
 fi
 
-./scripts/make-app.sh release >/dev/null
+# Forward the version so the bundled Info.plist matches the DMG name
+# (EXPLORERR_BUILD passes through from the environment when set).
+EXPLORERR_VERSION="$VERSION" ./scripts/make-app.sh release >/dev/null
 
 STAGING="build/dmg-staging"
 rm -rf "$STAGING"
