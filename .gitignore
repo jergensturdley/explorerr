@@ -1,0 +1,15 @@
+# Swift Package Manager
+.build/
+swiftpm/
+
+# Bundled app output
+build/
+
+# macOS
+.DS_Store
+*.dSYM
+*.plist.user
+
+# Xcode (should never appear, but just in case)
+*.xcodeproj/
+xcuserdata/
