@@ -1,5 +1,61 @@
 # Changelog
 
+## 1.1.0 (2026-08-22)
+
+Navigability release: Explorer/Dolphin muscle memory everywhere, plus fixes
+for every UI regression found in 1.0.
+
+### Selection
+- Rubber-band (marquee) selection in Details, Icons, Tiles, List, and Gallery,
+  with live updates, ⌘/⇧-band add, Win11-accent band, and autoscroll at the
+  viewport edge
+- Instant single-click selection (removed the ~250ms double-click-recognizer lag);
+  reliable ⇧/⌘-click
+- ⇧+arrows extend the selection; Invert Selection (⇧⌘A); status bar shows the
+  selected total size
+
+### Keyboard
+- Grid-aware arrow navigation: ↑↓←→ move by on-screen geometry in every view,
+  ←/→ wrap rows in icon views, Home/End/PgUp/PgDn, type-ahead ("type to select",
+  repeated letter cycles)
+- Esc clears the search, then the selection
+- Real Edit-menu wiring: ⌘X/⌘C/⌘V/⌘A/⌘Z/⇧⌘Z now act on files (with text-field
+  fallback while renaming or editing the path), Copy as Path (⇧⌘C), Duplicate (⌘D)
+- Go shortcuts: Back ⌘[, Forward ⌘], Up ⌘↑, Open Selection ⌘↓; Windows keys fixed
+  (F2 rename, F4 terminal, F5 refresh/copy, F6 move — previously mapped to the
+  wrong keycodes)
+
+### Tabs
+- Drag tabs to reorder; middle-click a tab to close it
+- Ctrl+Tab / Ctrl+Shift+Tab cycling; Reopen Closed Tab (⇧⌘T); terminal toggle
+  moved to ⌥⌘T (F4 still works)
+- Middle-click a folder item, breadcrumb segment, or sidebar folder to open it
+  in a background tab; mouse buttons 4/5 go back/forward
+
+### Navigation & panes
+- Drop files onto sidebar folders and onto folder rows/tiles (no need to enter
+  the folder first)
+- Address-bar history entries jump the exact number of steps; Forward list is
+  ordered nearest-first
+- Alt+double-click opens Properties; double-click empty space goes up (Dolphin)
+- Dolphin-style terminal follow: navigating cd's the integrated terminal when
+  the shell is idle and unfocused (toggle in Options)
+- Clicking a pane's tab strip activates that pane; pane hit-testing fixed near
+  the window bottom; multi-window keyboard/mouse events no longer cross windows
+
+### Fixes
+- Titlebar tab strips no longer overflow the window (caption buttons were
+  clipped off-screen)
+- Details header columns align exactly with rows; column resize no longer
+  accelerates or drags inverted; clicking a row no longer re-centers the list
+- Released DMGs now stamp the real version into the app's Info.plist; version
+  strings are sanitized; CI builds and verifies a DMG on every push/PR
+- Preferences survive app updates that add new settings keys
+
+### Engineering
+- Self-test grown from 30 to 52 checks (band math, spatial navigation, history
+  jumps, tab reorder/reopen, prefs decoding)
+
 ## 1.0.0 (2026-08-22)
 
 First public release.
