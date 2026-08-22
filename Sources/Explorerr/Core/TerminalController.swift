@@ -122,6 +122,17 @@ final class TerminalController: ObservableObject {
         send("cd '\(escaped)'\n")
     }
 
+    /// Dolphin-style automatic cwd sync on navigation. Only fires when it's safe:
+    /// the shell must be idle (own the pty foreground — no vim/less/running command)
+    /// and the terminal must not be focused (the user isn't mid-keystroke). ^U first
+    /// clears any leftover prompt input.
+    func autoCD(to url: URL) {
+        guard !exited, pty.isRunning, pty.isShellForeground else { return }
+        if NSApp.keyWindow?.firstResponder is TerminalHostView.TerminalTextView { return }
+        let escaped = url.path.replacingOccurrences(of: "'", with: "'\\''")
+        send("\u{15}cd '\(escaped)'\n")
+    }
+
     func paste(_ string: String) {
         send(string)
     }

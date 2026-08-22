@@ -202,6 +202,14 @@ enum SelfTest {
             expect(BandSelect.hits(frames: frames, rect: CGRect(x: 500, y: 500, width: 10, height: 10)).isEmpty, "band misses everything cleanly")
         }
 
+        // Prefs decoding tolerates keys added in later versions
+        do {
+            let legacy = #"{"showHidden":true,"showExtensions":false}"#
+            let p = try? JSONDecoder().decode(Prefs.self, from: Data(legacy.utf8))
+            expect(p?.showHidden == true && p?.showExtensions == false, "Prefs keeps stored values")
+            expect(p?.syncTerminalCD == true && p?.foldersFirst == true, "Prefs defaults missing keys")
+        }
+
         // Spatial arrow navigation over a 3×2 grid of frames
         do {
             func cell(_ col: Int, _ row: Int) -> CGRect {

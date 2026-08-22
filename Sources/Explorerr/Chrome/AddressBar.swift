@@ -142,6 +142,7 @@ struct AddressBar: View {
     }
 
     private func crumbSegment(_ crumb: AddressCrumb, _ p: Win11.Palette, isLast: Bool) -> some View {
+        // The whole segment is a middle-click target: open this ancestor in a new tab.
         HStack(spacing: 2) {
             if isLast {
                 Text(crumb.name)
@@ -179,6 +180,7 @@ struct AddressBar: View {
                 .buttonStyle(WinIconButtonStyle(padding: 2))
             }
         }
+        .modifier(ReportsLinkFrame(url: crumb.url, tabID: tab.id))
     }
 
     private var historyMenu: [WinMenuEntry] {

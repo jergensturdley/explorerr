@@ -52,6 +52,8 @@ final class WindowModel: ObservableObject {
     var stripFrames: [UUID: CGRect] = [:]
     /// Window-space frames of individual tabs (middle-click close).
     var tabFrames: [UUID: CGRect] = [:]
+    /// Folder links in the chrome (breadcrumbs, sidebar) for middle-click → new tab.
+    var linkFrames: [LinkTarget] = []
 
     init(app: AppModel) {
         self.app = app

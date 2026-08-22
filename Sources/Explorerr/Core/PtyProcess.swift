@@ -123,6 +123,14 @@ final class PtyProcess {
         }
     }
 
+    /// True when the shell itself owns the terminal foreground (no command running).
+    /// The shell is its session/process-group leader (setsid in the child), so the
+    /// pty's foreground pgid equals the shell pid exactly when it sits at a prompt.
+    var isShellForeground: Bool {
+        guard masterFD >= 0, pid > 0 else { return false }
+        return tcgetpgrp(masterFD) == pid
+    }
+
     func setWinsize(cols: Int, rows: Int) {
         var win = winsize(ws_row: UInt16(rows), ws_col: UInt16(cols), ws_xpixel: 0, ws_ypixel: 0)
         _ = ioctl(masterFD, TIOCSWINSZ, &win)

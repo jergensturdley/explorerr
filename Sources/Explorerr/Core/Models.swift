@@ -138,6 +138,24 @@ struct Prefs: Codable {
     var startupHome: Bool = true
     var statusVisible: Bool = true
     var showDetailsPane: Bool = false
+    /// Dolphin-style: navigating the view cd's the integrated terminal when the shell is idle.
+    var syncTerminalCD: Bool = true
+
+    init() {}
+
+    // Tolerant decoding: adding a field must not reset every stored preference.
+    init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        showHidden = try c.decodeIfPresent(Bool.self, forKey: .showHidden) ?? false
+        showExtensions = try c.decodeIfPresent(Bool.self, forKey: .showExtensions) ?? true
+        foldersFirst = try c.decodeIfPresent(Bool.self, forKey: .foldersFirst) ?? true
+        confirmDelete = try c.decodeIfPresent(Bool.self, forKey: .confirmDelete) ?? false
+        searchAllSubfolders = try c.decodeIfPresent(Bool.self, forKey: .searchAllSubfolders) ?? true
+        startupHome = try c.decodeIfPresent(Bool.self, forKey: .startupHome) ?? true
+        statusVisible = try c.decodeIfPresent(Bool.self, forKey: .statusVisible) ?? true
+        showDetailsPane = try c.decodeIfPresent(Bool.self, forKey: .showDetailsPane) ?? false
+        syncTerminalCD = try c.decodeIfPresent(Bool.self, forKey: .syncTerminalCD) ?? true
+    }
 }
 
 struct RecentItem: Codable, Hashable {

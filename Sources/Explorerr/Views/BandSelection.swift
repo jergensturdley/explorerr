@@ -71,6 +71,26 @@ struct ReportsBandFrame: ViewModifier {
     }
 }
 
+/// Finds the AppKit scroll view that hosts the SwiftUI ScrollView content
+/// (for autoscroll while rubber-banding).
+private struct ScrollViewGrabber: NSViewRepresentable {
+    let holder: ScrollHolder
+    func makeNSView(context: Context) -> NSView {
+        let v = NSView()
+        DispatchQueue.main.async { [weak v, weak holder] in
+            holder?.scrollView = v?.enclosingScrollView
+        }
+        return v
+    }
+    func updateNSView(_ nsView: NSView, context: Context) {
+        if holder.scrollView == nil { holder.scrollView = nsView.enclosingScrollView }
+    }
+}
+
+final class ScrollHolder {
+    weak var scrollView: NSScrollView?
+}
+
 /// Attach to the scroll CONTENT of an item view (Details/Icons/Tiles/List/Gallery).
 struct BandSelectable: ViewModifier {
     @ObservedObject var tab: TabState
@@ -80,6 +100,9 @@ struct BandSelectable: ViewModifier {
     @State private var bandOrigin: CGPoint? = nil
     @State private var bandRect: CGRect? = nil
     @State private var baseSelection: Set<String> = []
+    @State private var scrollHolder = ScrollHolder()
+    @State private var pointer: CGPoint = .zero        // last drag location, content space
+    @State private var autoscrollTimer: Timer? = nil
 
     func body(content: Content) -> some View {
         content
@@ -89,6 +112,7 @@ struct BandSelectable: ViewModifier {
                 tab.itemFrames = $0   // shared with keyboard spatial navigation
             }
             .background(catcher)
+            .background(ScrollViewGrabber(holder: scrollHolder))
             .background(
                 // Content origin in window space: lets the mouse monitor translate
                 // itemFrames into window coordinates (middle-click hit-testing).
@@ -101,6 +125,7 @@ struct BandSelectable: ViewModifier {
                 }
             )
             .overlay(alignment: .topLeading) { bandOverlay }
+            .onDisappear { stopAutoscroll() }
     }
 
     // Clear layer behind the items: only presses on empty space reach it.
@@ -117,19 +142,76 @@ struct BandSelectable: ViewModifier {
                             baseSelection = (mods.contains(.command) || mods.contains(.shift)) ? tab.selection : []
                             tab.renamingID = nil
                             tab.isBandSelecting = true
+                            startAutoscroll()
                         }
-                        let r = BandSelect.rect(from: bandOrigin ?? value.startLocation, to: value.location)
-                        bandRect = r
-                        let newSelection = baseSelection.union(BandSelect.hits(frames: frames, rect: r))
-                        if newSelection != tab.selection { tab.selection = newSelection }
+                        updateBand(to: value.location)
                     }
                     .onEnded { _ in
                         bandOrigin = nil
                         bandRect = nil
                         baseSelection = []
                         tab.isBandSelecting = false
+                        stopAutoscroll()
                     }
             )
+    }
+
+    private func updateBand(to point: CGPoint) {
+        pointer = point
+        guard let origin = bandOrigin else { return }
+        let r = BandSelect.rect(from: origin, to: point)
+        bandRect = r
+        let newSelection = baseSelection.union(BandSelect.hits(frames: frames, rect: r))
+        if newSelection != tab.selection { tab.selection = newSelection }
+    }
+
+    // MARK: autoscroll while banding near/past the viewport edge
+
+    private func startAutoscroll() {
+        guard autoscrollTimer == nil else { return }
+        let timer = Timer(timeInterval: 1.0 / 60.0, repeats: true) { _ in
+            MainActor.assumeIsolated { autoscrollTick() }
+        }
+        // .common so the timer keeps firing inside the mouse-tracking runloop mode
+        RunLoop.main.add(timer, forMode: .common)
+        autoscrollTimer = timer
+    }
+
+    private func stopAutoscroll() {
+        autoscrollTimer?.invalidate()
+        autoscrollTimer = nil
+    }
+
+    private func autoscrollTick() {
+        guard bandOrigin != nil, let sv = scrollHolder.scrollView, let doc = sv.documentView else { return }
+        let visible = sv.documentVisibleRect
+        let margin: CGFloat = 28
+        let maxStep: CGFloat = 22
+
+        func step(_ pos: CGFloat, _ lo: CGFloat, _ hi: CGFloat) -> CGFloat {
+            if pos > hi - margin { return min(maxStep, max(2, (pos - (hi - margin)) / 3)) }
+            if pos < lo + margin { return -min(maxStep, max(2, ((lo + margin) - pos) / 3)) }
+            return 0
+        }
+
+        var delta = CGPoint(
+            x: step(pointer.x, visible.minX, visible.maxX),
+            y: step(pointer.y, visible.minY, visible.maxY)
+        )
+        guard delta != .zero else { return }
+
+        // Clamp the scroll target to the document bounds
+        let newX = min(max(0, visible.minX + delta.x), max(0, doc.bounds.width - visible.width))
+        let newY = min(max(0, visible.minY + delta.y), max(0, doc.bounds.height - visible.height))
+        delta = CGPoint(x: newX - visible.minX, y: newY - visible.minY)
+        guard delta != .zero else { return }
+
+        sv.contentView.scroll(to: NSPoint(x: newX, y: newY))
+        sv.reflectScrolledClipView(sv.contentView)
+
+        // The cursor is stationary in the window, so its content-space position moves
+        // with the scroll: advance the pointer and regrow the band + selection.
+        updateBand(to: CGPoint(x: pointer.x + delta.x, y: pointer.y + delta.y))
     }
 
     @ViewBuilder

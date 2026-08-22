@@ -79,6 +79,11 @@ struct MainWindow: View {
                 .onReceive(NotificationCenter.default.publisher(for: .explorerrNavigated)) { note in
                     if let sender = note.object as? TabState {
                         windowModel.mirrorNavigation(sender: sender, location: sender.location)
+                        // Dolphin: keep the integrated terminal's cwd in step with navigation
+                        if app.prefs.syncTerminalCD, windowModel.terminalVisible,
+                           sender === windowModel.activeTab, let url = sender.currentFolderURL {
+                            terminal.autoCD(to: url)
+                        }
                     }
                 }
                 .focusedSceneValue(\.explorerWindow, windowModel)
@@ -176,6 +181,9 @@ struct MainWindow: View {
         }
         .onPreferenceChange(StripFrameKey.self) { [weak windowModel] frames in
             windowModel?.stripFrames = frames
+        }
+        .onPreferenceChange(LinkFrameKey.self) { [weak windowModel] links in
+            windowModel?.linkFrames = links
         }
         .frame(minWidth: Win11.Metrics.windowMinWidth, minHeight: Win11.Metrics.windowMinHeight)
         .background(WindowConfigurator())
@@ -328,6 +336,18 @@ struct MainWindow: View {
                         pane.controller.closeTab(hit.id)
                         return nil
                     }
+                }
+                // Breadcrumb / sidebar folder links → background tab
+                if let link = model.linkFrames.first(where: { $0.frame.contains(point) }) {
+                    let controller: TabController
+                    if let tid = link.tabID,
+                       let pane = model.panes.first(where: { $0.controller.tabs.contains { $0.id == tid } }) {
+                        controller = pane.controller
+                    } else {
+                        controller = model.activePane.controller
+                    }
+                    controller.addTab(.folder(link.url), activate: false)
+                    return nil
                 }
                 for pane in model.panes {
                     let tab = pane.controller.active
@@ -665,6 +685,36 @@ struct StripFrameKey: PreferenceKey {
     static var defaultValue: [UUID: CGRect] = [:]
     static func reduce(value: inout [UUID: CGRect], nextValue: () -> [UUID: CGRect]) {
         value.merge(nextValue()) { _, new in new }
+    }
+}
+
+// MARK: - Middle-clickable folder links (breadcrumbs, sidebar rows)
+
+/// A folder link somewhere in the chrome that middle-click opens in a background tab.
+struct LinkTarget: Equatable {
+    let url: URL
+    /// Tab whose pane should get the new tab (breadcrumbs); nil → active pane (sidebar).
+    let tabID: UUID?
+    let frame: CGRect
+}
+
+struct LinkFrameKey: PreferenceKey {
+    static var defaultValue: [LinkTarget] = []
+    static func reduce(value: inout [LinkTarget], nextValue: () -> [LinkTarget]) {
+        value += nextValue()
+    }
+}
+
+/// Reports a view's window-space frame as a middle-clickable folder link.
+struct ReportsLinkFrame: ViewModifier {
+    let url: URL
+    var tabID: UUID? = nil
+    func body(content: Content) -> some View {
+        content.background(
+            GeometryReader { g in
+                Color.clear.preference(key: LinkFrameKey.self, value: [LinkTarget(url: url, tabID: tabID, frame: g.frame(in: .named("win")))])
+            }
+        )
     }
 }
 

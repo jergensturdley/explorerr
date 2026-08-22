@@ -165,6 +165,7 @@ struct NavNodeRow: View {
             .onTapGesture { tab.navigate(node.location) }
             .onHover { hovering = $0 }
             .modifier(NavFolderDropTarget(node: node, tab: tab, app: app, targeted: $dropTargeted))
+            .modifier(NavLinkFrameReporter(node: node))
             .contextMenu {
                 if case .folder(let url) = node.location {
                     Button(app.isPinned(url.standardizedFileURL.path) ? "Unpin from Quick access" : "Pin to Quick access") {
@@ -278,6 +279,20 @@ struct NavNodeRow: View {
                 }
                 childNodes = nodes.isEmpty ? [] : nodes
             }
+        }
+    }
+}
+
+/// Sidebar folder rows are middle-click targets (open in new background tab).
+struct NavLinkFrameReporter: ViewModifier {
+    let node: NavNode
+
+    @ViewBuilder
+    func body(content: Content) -> some View {
+        if case .folder(let url) = node.location {
+            content.modifier(ReportsLinkFrame(url: url))
+        } else {
+            content
         }
     }
 }

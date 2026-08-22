@@ -33,6 +33,11 @@ struct SettingsView: View {
                 get: { app.prefs.searchAllSubfolders },
                 set: { app.prefs.searchAllSubfolders = $0 }
             ))
+
+            Toggle("Terminal follows navigation (cd when idle)", isOn: Binding(
+                get: { app.prefs.syncTerminalCD },
+                set: { app.prefs.syncTerminalCD = $0 }
+            ))
         }
         .padding(18)
     }
