@@ -89,6 +89,17 @@ struct BandSelectable: ViewModifier {
                 tab.itemFrames = $0   // shared with keyboard spatial navigation
             }
             .background(catcher)
+            .background(
+                // Content origin in window space: lets the mouse monitor translate
+                // itemFrames into window coordinates (middle-click hit-testing).
+                GeometryReader { g -> Color in
+                    let origin = g.frame(in: .named("win")).origin
+                    if tab.contentOriginInWin != origin {
+                        DispatchQueue.main.async { tab.contentOriginInWin = origin }
+                    }
+                    return Color.clear
+                }
+            )
             .overlay(alignment: .topLeading) { bandOverlay }
     }
 

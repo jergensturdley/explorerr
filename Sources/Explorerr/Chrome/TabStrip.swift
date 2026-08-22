@@ -150,6 +150,11 @@ struct TabItemView: View {
         )
         .padding(.top, 5)
         .contentShape(Rectangle())
+        .background(
+            GeometryReader { g in
+                Color.clear.preference(key: TabFrameKey.self, value: [tab.id: g.frame(in: .named("win"))])
+            }
+        )
         .onTapGesture { onActivate() }
         .onHover { hovering = $0 }
         // Drag a tab onto another to reorder (within the same pane).
@@ -183,6 +188,15 @@ struct TabItemView: View {
         case .network: NavIcon(symbol: "point.3.connected.trianglepath.dotted", size: 14)
         case .trash: TrashIconView(size: 14)
         }
+    }
+}
+
+/// Window-space frames of individual tabs, collected at the window root for
+/// middle-click-close hit-testing.
+struct TabFrameKey: PreferenceKey {
+    static var defaultValue: [UUID: CGRect] = [:]
+    static func reduce(value: inout [UUID: CGRect], nextValue: () -> [UUID: CGRect]) {
+        value.merge(nextValue()) { _, new in new }
     }
 }
 

@@ -37,6 +37,16 @@ struct FolderContentView: View {
             }
         }
         .contentShape(Rectangle())
+        .background(
+            // Visible content region in window space (clips middle-click hit-testing).
+            GeometryReader { g -> Color in
+                let frame = g.frame(in: .named("win"))
+                if tab.contentClipInWin != frame {
+                    DispatchQueue.main.async { tab.contentClipInWin = frame }
+                }
+                return Color.clear
+            }
+        )
         .onTapGesture(count: 2) {
             // Dolphin nicety: double-click empty space goes up one folder
             if tab.currentFolderURL != nil, !tab.isSearching { tab.goUp() }

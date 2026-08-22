@@ -1,6 +1,5 @@
 import SwiftUI
 import AppKit
-import Quartz
 
 // Top-left-only rounded corner for the Win11 content card
 struct TopLeftRoundedShape: Shape {
@@ -113,6 +112,11 @@ struct MainWindow: View {
                             // The last strip gives up room for the caption buttons so the
                             // whole row fits the window instead of overflowing off-screen.
                             .frame(width: isLast ? max(60, sizes.paneWidths[idx] - windowControlsReserve) : sizes.paneWidths[idx])
+                            .background(
+                                GeometryReader { g in
+                                    Color.clear.preference(key: StripFrameKey.self, value: [pane.id: g.frame(in: .named("win"))])
+                                }
+                            )
                             .overlay(alignment: .trailing) {
                                 if !isLast {
                                     Rectangle().fill(themeDivider).frame(width: 1).padding(.vertical, 7)
@@ -167,6 +171,12 @@ struct MainWindow: View {
             MenuHost()
         }
         .coordinateSpace(name: "win")
+        .onPreferenceChange(TabFrameKey.self) { [weak windowModel] frames in
+            windowModel?.tabFrames = frames
+        }
+        .onPreferenceChange(StripFrameKey.self) { [weak windowModel] frames in
+            windowModel?.stripFrames = frames
+        }
         .frame(minWidth: Win11.Metrics.windowMinWidth, minHeight: Win11.Metrics.windowMinHeight)
         .background(WindowConfigurator())
         .background(WindowAccessor(state: chrome))
@@ -297,18 +307,52 @@ struct MainWindow: View {
     private func installMonitors() {
         guard keyMonitor == nil else { return }
 
-        // Activate the pane the user clicks into + mouse back/forward buttons (Windows mice)
-        mouseMonitor = NSEvent.addLocalMonitorForEvents(matching: [.leftMouseDown, .rightMouseDown, .otherMouseDown]) { [weak windowModel] event in
-            guard let model = windowModel, event.window != nil else { return event }
-            if model.panes.count > 1 {
-                let point = event.locationInWindow
+        // Pane activation, middle-click (close tab / open folder in new tab) and
+        // mouse back/forward buttons (Windows mice).
+        mouseMonitor = NSEvent.addLocalMonitorForEvents(matching: [.leftMouseDown, .rightMouseDown, .otherMouseDown]) { [weak windowModel, weak chrome] event in
+            guard let model = windowModel, let window = event.window else { return event }
+            // Monitors are app-wide: only handle events for this window (not sheets,
+            // panels or other Explorerr windows).
+            guard window === chrome?.window else { return event }
+            // AppKit window coords are bottom-left origin; the "win" preference frames
+            // are top-left. Flip Y so hit-testing is exact everywhere, not just for
+            // full-height columns.
+            let height = window.contentView?.bounds.height ?? window.frame.height
+            let point = CGPoint(x: event.locationInWindow.x, y: height - event.locationInWindow.y)
+
+            // Middle click: close the tab under the cursor, or open the folder item
+            // under the cursor in a background tab (Explorer/Dolphin/browsers).
+            if event.type == .otherMouseDown, event.buttonNumber == 2 {
                 for pane in model.panes {
-                    if let frame = model.paneFrames[pane.id], frame.contains(point) {
+                    if let hit = pane.controller.tabs.first(where: { model.tabFrames[$0.id]?.contains(point) == true }) {
+                        pane.controller.closeTab(hit.id)
+                        return nil
+                    }
+                }
+                for pane in model.panes {
+                    let tab = pane.controller.active
+                    guard case .folder = tab.location, tab.contentClipInWin.contains(point) else { continue }
+                    let origin = tab.contentOriginInWin
+                    if let id = tab.itemFrames.first(where: { $0.value.offsetBy(dx: origin.x, dy: origin.y).contains(point) })?.key,
+                       let item = tab.sortedItems.first(where: { $0.id == id }), item.isDirectory {
+                        pane.controller.addTab(.folder(item.url), activate: false)
+                        return nil
+                    }
+                    break
+                }
+            }
+
+            if model.panes.count > 1 {
+                for pane in model.panes {
+                    let inColumn = model.paneFrames[pane.id]?.contains(point) == true
+                    let inStrip = model.stripFrames[pane.id]?.contains(point) == true
+                    if inColumn || inStrip {
                         model.activate(paneID: pane.id)
                         break
                     }
                 }
             }
+
             if event.type == .otherMouseDown {
                 if event.buttonNumber == 3 { model.activeTab.goBack(); return nil }
                 if event.buttonNumber == 4 { model.activeTab.goForward(); return nil }
@@ -316,8 +360,11 @@ struct MainWindow: View {
             return event
         }
 
-        keyMonitor = NSEvent.addLocalMonitorForEvents(matching: .keyDown) { [weak windowModel, weak app] event in
+        keyMonitor = NSEvent.addLocalMonitorForEvents(matching: .keyDown) { [weak windowModel, weak app, weak chrome] event in
             guard let model = windowModel, let app else { return event }
+            // Only handle keys for this window (monitors are app-wide; ⌘N windows and
+            // the Quick Look panel install/receive their own events).
+            guard event.window == nil || event.window === chrome?.window else { return event }
             let tab = model.activeTab
 
             // Don't interfere with text editing (rename, path editor, search)
@@ -329,7 +376,6 @@ struct MainWindow: View {
                     app.menuCoordinator.dismiss()
                     return nil
                 }
-                if event.window is QLPreviewPanel { return event }
                 if tab.isSearching {
                     tab.clearSearch()
                     return nil
@@ -608,6 +654,14 @@ struct MainWindow: View {
 // MARK: - Pane frame preference
 
 struct PaneFrameKey: PreferenceKey {
+    static var defaultValue: [UUID: CGRect] = [:]
+    static func reduce(value: inout [UUID: CGRect], nextValue: () -> [UUID: CGRect]) {
+        value.merge(nextValue()) { _, new in new }
+    }
+}
+
+/// Window-space frames of each pane's titlebar tab strip.
+struct StripFrameKey: PreferenceKey {
     static var defaultValue: [UUID: CGRect] = [:]
     static func reduce(value: inout [UUID: CGRect], nextValue: () -> [UUID: CGRect]) {
         value.merge(nextValue()) { _, new in new }

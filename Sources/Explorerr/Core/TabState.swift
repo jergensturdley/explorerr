@@ -21,6 +21,12 @@ final class TabState: ObservableObject, Identifiable {
     /// Frames of the currently laid-out items (content space), fed by BandSelectable.
     /// Used for grid-aware arrow-key navigation.
     var itemFrames: [String: CGRect] = [:]
+    /// Origin of the scroll content in window ("win") space — itemFrames.offsetBy(origin)
+    /// gives window-space item frames for mouse hit-testing (middle-click).
+    var contentOriginInWin: CGPoint = .zero
+    /// Visible content region in window space; hit-tests are clipped to it so offscreen
+    /// (but still instantiated) lazy rows can't swallow clicks on other chrome.
+    var contentClipInWin: CGRect = .zero
 
     @Published var sortKey: SortKey = .name
     @Published var sortAscending = true

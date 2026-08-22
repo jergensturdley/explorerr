@@ -48,6 +48,10 @@ final class WindowModel: ObservableObject {
 
     /// Window-space frames of pane columns (for hit-testing clicks into panes). Not published.
     var paneFrames: [UUID: CGRect] = [:]
+    /// Window-space frames of each pane's titlebar tab strip (pane activation from strip clicks).
+    var stripFrames: [UUID: CGRect] = [:]
+    /// Window-space frames of individual tabs (middle-click close).
+    var tabFrames: [UUID: CGRect] = [:]
 
     init(app: AppModel) {
         self.app = app

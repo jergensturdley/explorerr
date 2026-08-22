@@ -317,6 +317,8 @@ struct ShortcutsSheet: View {
         ("Move to Recycle Bin", "⌘⌫ or fn⌫"), ("Empty Recycle Bin", "⇧⌘⌫"),
         ("Go up (parent folder)", "Backspace, ⌥↑ or ⌘↑"),
         ("Back / Forward", "⌥←/→, ⌘[ / ⌘], mouse 4/5"),
+        ("Middle-click tab", "close tab"),
+        ("Middle-click folder", "open in background tab"),
         ("Open selection", "Enter or ⌘↓"),
         ("Type to select", "just start typing"),
         ("First / last item", "Home / End"),
