@@ -10,7 +10,7 @@ jobs:
     name: Build + selftest
     runs-on: macos-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
 
       - name: Toolchain
         run: swift --version
@@ -30,13 +30,13 @@ jobs:
           hdiutil verify "build/Explorerr-$VERSION.dmg"
 
       - name: Upload app artifact
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v5
         with:
           name: Explorerr-app
           path: build/Explorerr.app
 
       - name: Upload DMG artifact
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v5
         with:
           name: Explorerr-dmg
           path: build/Explorerr-${{ steps.dmg.outputs.version }}.dmg

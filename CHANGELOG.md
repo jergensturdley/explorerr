@@ -1,5 +1,14 @@
 # Changelog
 
+## 1.1.1 (2026-08-22)
+
+- Fix: the titlebar row claimed half the window height (tab strips and window
+  controls floated mid-air, content squeezed into the bottom half). The
+  flexible nav-width placeholder introduced with the strip-alignment fix made
+  the row vertically greedy; it is now pinned to the 36pt strip height.
+- CI: actions/checkout and actions/upload-artifact bumped to v5 (clears the
+  Node 20 deprecation warnings).
+
 ## 1.1.0 (2026-08-22)
 
 Navigability release: Explorer/Dolphin muscle memory everywhere, plus fixes

@@ -131,6 +131,10 @@ struct MainWindow: View {
                         Spacer(minLength: 4)
                         WindowControls(chrome: chrome)
                     }
+                    // Pin the row height: the flexible nav-width placeholder would otherwise
+                    // make this row vertically greedy and the VStack would split the window
+                    // 50/50 between the titlebar and the content.
+                    .frame(height: Win11.Metrics.tabStripHeight)
 
                     HStack(spacing: 0) {
                         NavigationPane(tab: windowModel.activeTab, app: app)
