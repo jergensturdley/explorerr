@@ -1,5 +1,17 @@
 # Changelog
 
+## 1.1.2 (2026-08-22)
+
+- Fix: navigating did not update the content area. The location router lived
+  in the window body, which never observes the tab, so clicking a sidebar
+  entry (or any navigation that changes the view type, like Home to a folder)
+  left the old content on screen until something else redrew the window.
+  Switching tabs and the sidebar's active-tab highlight had the same stale
+  reference problem. The pane column is now built from views that observe the
+  tab controller and the active tab, so navigation, tab switches, and the
+  sidebar all update immediately. Present since 1.0.0; verified interactively
+  (Home to This PC and back) after the fix.
+
 ## 1.1.1 (2026-08-22)
 
 - Fix: the titlebar row claimed half the window height (tab strips and window

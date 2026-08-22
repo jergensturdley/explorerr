@@ -137,7 +137,7 @@ struct MainWindow: View {
                     .frame(height: Win11.Metrics.tabStripHeight)
 
                     HStack(spacing: 0) {
-                        NavigationPane(tab: windowModel.activeTab, app: app)
+                        ActiveNavigationPane(controller: windowModel.activePane.controller, app: app)
                         NavResizeDivider()
 
                         ForEach(Array(windowModel.panes.enumerated()), id: \.element.id) { idx, pane in
@@ -212,35 +212,12 @@ struct MainWindow: View {
     // MARK: pane column
 
     private func paneColumn(_ pane: PaneModel) -> some View {
-        let p = Win11.palette(theme.scheme)
-        let tab = pane.controller.active
-        let isActive = pane.id == windowModel.activePaneID
-
-        return VStack(spacing: 0) {
-            CommandBar(tab: tab, app: app)
-            AddressBar(tab: tab, app: app)
-
-            VStack(spacing: 0) {
-                HStack(spacing: 0) {
-                    contentRouter(tab)
-                    if isActive && app.prefs.showDetailsPane {
-                        DetailsPaneView(tab: tab, app: app)
-                    }
-                }
-                if app.prefs.statusVisible {
-                    StatusBar(tab: tab, app: app)
-                }
-            }
-            .frame(maxWidth: .infinity, maxHeight: .infinity)
-            .background(TopLeftRoundedShape(radius: 8).fill(p.contentBG))
-            .clipShape(TopLeftRoundedShape(radius: 8))
-            .overlay(
-                TopLeftRoundedShape(radius: 8)
-                    .stroke(isActive ? p.selectionBorder : p.stroke, lineWidth: 1)
-                    .allowsHitTesting(false)
-            )
-        }
-        .opacity(isActive ? 1 : 0.88)
+        PaneColumnView(
+            controller: pane.controller,
+            app: app,
+            isActive: pane.id == windowModel.activePaneID
+        )
+        .opacity(pane.id == windowModel.activePaneID ? 1 : 0.88)
         .background(
             GeometryReader { g in
                 Color.clear.preference(key: PaneFrameKey.self, value: [pane.id: g.frame(in: .named("win"))])
@@ -248,18 +225,6 @@ struct MainWindow: View {
         )
         .onPreferenceChange(PaneFrameKey.self) { frames in
             windowModel.paneFrames.merge(frames) { _, new in new }
-        }
-    }
-
-    @ViewBuilder
-    private func contentRouter(_ tab: TabState) -> some View {
-        switch tab.location {
-        case .folder: FolderContentView(tab: tab, app: app)
-        case .home: HomeView(tab: tab, app: app)
-        case .thisPC: ThisPCView(tab: tab, app: app)
-        case .gallery: GalleryView(tab: tab, app: app)
-        case .trash: TrashView(tab: tab, app: app)
-        case .network: NetworkView(tab: tab, app: app)
         }
     }
 
@@ -672,6 +637,79 @@ struct MainWindow: View {
     private func removeMonitors() {
         if let m = keyMonitor { NSEvent.removeMonitor(m); keyMonitor = nil }
         if let m = mouseMonitor { NSEvent.removeMonitor(m); mouseMonitor = nil }
+    }
+}
+
+// MARK: - Pane column (observation layers)
+
+/// Observes the active pane's controller so the sidebar follows tab switches.
+private struct ActiveNavigationPane: View {
+    @ObservedObject var controller: TabController
+    @ObservedObject var app: AppModel
+
+    var body: some View {
+        NavigationPane(tab: controller.active, app: app)
+    }
+}
+
+/// Observes the pane's TabController so switching tabs rebuilds the column.
+/// MainWindow itself never observes controllers or tabs, so without these layers
+/// the content router kept showing the previous tab/location forever.
+private struct PaneColumnView: View {
+    @ObservedObject var controller: TabController
+    @ObservedObject var app: AppModel
+    let isActive: Bool
+
+    var body: some View {
+        TabColumnView(tab: controller.active, app: app, isActive: isActive)
+    }
+}
+
+/// Observes the active TabState so the location router re-evaluates on navigation.
+private struct TabColumnView: View {
+    @ObservedObject var tab: TabState
+    @ObservedObject var app: AppModel
+    let isActive: Bool
+    @EnvironmentObject var theme: Theme
+
+    var body: some View {
+        let p = Win11.palette(theme.scheme)
+        VStack(spacing: 0) {
+            CommandBar(tab: tab, app: app)
+            AddressBar(tab: tab, app: app)
+
+            VStack(spacing: 0) {
+                HStack(spacing: 0) {
+                    content
+                    if isActive && app.prefs.showDetailsPane {
+                        DetailsPaneView(tab: tab, app: app)
+                    }
+                }
+                if app.prefs.statusVisible {
+                    StatusBar(tab: tab, app: app)
+                }
+            }
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
+            .background(TopLeftRoundedShape(radius: 8).fill(p.contentBG))
+            .clipShape(TopLeftRoundedShape(radius: 8))
+            .overlay(
+                TopLeftRoundedShape(radius: 8)
+                    .stroke(isActive ? p.selectionBorder : p.stroke, lineWidth: 1)
+                    .allowsHitTesting(false)
+            )
+        }
+    }
+
+    @ViewBuilder
+    private var content: some View {
+        switch tab.location {
+        case .folder: FolderContentView(tab: tab, app: app)
+        case .home: HomeView(tab: tab, app: app)
+        case .thisPC: ThisPCView(tab: tab, app: app)
+        case .gallery: GalleryView(tab: tab, app: app)
+        case .trash: TrashView(tab: tab, app: app)
+        case .network: NetworkView(tab: tab, app: app)
+        }
     }
 }
 

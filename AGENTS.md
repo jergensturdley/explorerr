@@ -59,6 +59,11 @@ in `Sources/Explorerr/`. No external dependencies.
 
 ## Conventions
 
+- MainWindow does not observe `TabController` or `TabState`. Any view structure that
+  depends on their state (which tab is active, the tab's location) must live in a child
+  view that declares them as `@ObservedObject` (see `PaneColumnView` / `TabColumnView` /
+  `ActiveNavigationPane` in MainWindow.swift). Reading them directly in MainWindow.body
+  bakes in a stale value: that was the 1.0-1.1.1 "navigation does nothing" bug.
 - Everything UI is SwiftUI; AppKit only behind `NSViewRepresentable` bridges (window config,
   visual-effect blur, terminal text view, sharing picker).
 - Main-actor UI state (`AppModel`, `WindowModel`, `TabController`, `TabState`,
