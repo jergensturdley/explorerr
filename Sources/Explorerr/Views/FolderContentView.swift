@@ -47,31 +47,15 @@ struct FolderContentView: View {
                 return Color.clear
             }
         )
-        .onTapGesture(count: 2) {
-            // Dolphin nicety: double-click EMPTY space goes up one folder.
-            // Items detect double-clicks manually (no count:2 recognizer of their own),
-            // so this parent recognizer also fires over items; bail out when the click
-            // landed on one, or "open folder" would immediately be followed by "go up".
-            guard tab.currentFolderURL != nil, !tab.isSearching, !doubleClickHitAnItem() else { return }
-            tab.goUp()
-        }
+        // Double-click on empty space goes up one folder (Dolphin); handled by the
+        // window's mouse monitor via BandSelect.isEmptySpace, NOT a count:2 recognizer
+        // here: a parent recognizer also fires over items (they detect double-clicks
+        // manually), which made every double-click navigate up.
         .onTapGesture { tab.clearSelection() }
         .contextMenu { emptyAreaContextMenu }
         .onDrop(of: [UTType.fileURL.identifier], isTargeted: $dropHover) { providers in
             guard let dest = tab.currentFolderURL else { return false }
             return handleDrop(providers, into: dest)
-        }
-    }
-
-    /// True when the event that triggered the current gesture sits over an item's frame
-    /// (window-space frames maintained by BandSelectable for hit-testing).
-    private func doubleClickHitAnItem() -> Bool {
-        guard let event = NSApp.currentEvent, let window = event.window else { return false }
-        let height = window.contentView?.bounds.height ?? window.frame.height
-        let point = CGPoint(x: event.locationInWindow.x, y: height - event.locationInWindow.y)
-        let origin = tab.contentOriginInWin
-        return tab.itemFrames.values.contains {
-            $0.offsetBy(dx: origin.x, dy: origin.y).contains(point)
         }
     }
 

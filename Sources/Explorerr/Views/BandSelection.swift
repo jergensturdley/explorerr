@@ -24,6 +24,17 @@ enum BandSelect {
 
     enum Direction { case up, down, left, right }
 
+    /// True when `point` (window space) is genuinely empty content area: inside the
+    /// visible clip, on no item, and BELOW the last laid-out item (excludes the
+    /// details header and gaps between tiles). Drives double-click-to-go-up.
+    static func isEmptySpace(point: CGPoint, clip: CGRect, origin: CGPoint, frames: [String: CGRect]) -> Bool {
+        guard clip.contains(point) else { return false }
+        let translated = frames.values.map { $0.offsetBy(dx: origin.x, dy: origin.y) }
+        if translated.contains(where: { $0.contains(point) }) { return false }
+        let lastBottom = translated.map(\.maxY).max() ?? clip.minY
+        return point.y > lastBottom
+    }
+
     /// Nearest item in `direction` from `id`: minimal travel along the axis (within a
     /// tolerance bucket, so a whole grid row competes), then minimal cross-axis offset.
     /// nil when `id` has no frame or nothing lies in that direction (boundary).

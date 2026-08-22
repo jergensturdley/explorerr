@@ -346,6 +346,28 @@ struct MainWindow: View {
                 if event.buttonNumber == 3 { model.activeTab.goBack(); return nil }
                 if event.buttonNumber == 4 { model.activeTab.goForward(); return nil }
             }
+
+            // Double-click on empty content area goes up one folder (Dolphin).
+            // Lives here, not in a SwiftUI count:2 recognizer: the monitor has the
+            // real event, runs before all recognizers, and can hit-test item frames
+            // so double-clicks on items never navigate up.
+            if event.type == .leftMouseDown, event.clickCount == 2 {
+                for pane in model.panes {
+                    let tab = pane.controller.active
+                    guard case .folder = tab.location, !tab.isSearching,
+                          tab.contentClipInWin.contains(point) else { continue }
+                    if BandSelect.isEmptySpace(
+                        point: point,
+                        clip: tab.contentClipInWin,
+                        origin: tab.contentOriginInWin,
+                        frames: tab.itemFrames
+                    ) {
+                        tab.goUp()
+                        return nil
+                    }
+                    break
+                }
+            }
             return event
         }
 

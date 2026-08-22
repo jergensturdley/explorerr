@@ -1,5 +1,21 @@
 # Changelog
 
+## 1.1.3 (2026-08-22)
+
+- Fix: double-clicking an item navigated up a directory (entering a folder
+  bounced straight back out). The "double-click empty space goes up" feature
+  used a parent gesture recognizer that also fired over items; it now lives
+  in the window's event monitor with precise item-frame hit-testing, and
+  "empty" means below the last item, so the details header and gaps between
+  tiles no longer count. Verified both ways with synthesized double-clicks.
+- File access: the app now asks for Desktop/Documents/Downloads permission
+  once at first launch (with proper usage descriptions, including removable
+  and network volumes), shows Full Disk Access status in Options with a
+  button that opens the right System Settings pane, and the Recycle Bin
+  explains that macOS needs Full Disk Access to show trash contents instead
+  of appearing empty.
+- Self-test: 57 checks.
+
 ## 1.1.2 (2026-08-22)
 
 - Fix: navigating did not update the content area. The location router lived

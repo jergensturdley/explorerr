@@ -227,6 +227,14 @@ enum SelfTest {
             expect(BandSelect.spatialMove(from: "c", frames: grid, direction: .right) == nil, "grid → stops at the row edge")
             expect(BandSelect.spatialMove(from: "a", frames: grid, direction: .down) == "d", "grid ↓ prefers same column over diagonal")
             expect(BandSelect.spatialMove(from: "missing", frames: grid, direction: .down) == nil, "unknown item yields nil")
+
+            // Empty-space detection (double-click-to-go-up): clip y 0-500, items end at y 180
+            let clip = CGRect(x: 0, y: 0, width: 400, height: 500)
+            expect(!BandSelect.isEmptySpace(point: CGPoint(x: 50, y: 40), clip: clip, origin: .zero, frames: grid), "point on an item is not empty space")
+            expect(!BandSelect.isEmptySpace(point: CGPoint(x: 105, y: 40), clip: clip, origin: .zero, frames: grid), "gap between items is not empty space")
+            expect(BandSelect.isEmptySpace(point: CGPoint(x: 50, y: 300), clip: clip, origin: .zero, frames: grid), "below the last item is empty space")
+            expect(!BandSelect.isEmptySpace(point: CGPoint(x: 50, y: 600), clip: clip, origin: .zero, frames: grid), "outside the clip is not empty space")
+            expect(BandSelect.isEmptySpace(point: CGPoint(x: 50, y: 100), clip: clip, origin: .zero, frames: [:]), "empty folder: anywhere in the clip counts")
         }
 
         // Tab reorder + reopen-closed-tab
