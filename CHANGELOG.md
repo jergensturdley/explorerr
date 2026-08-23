@@ -1,5 +1,36 @@
 # Changelog
 
+## 1.1.7 (2026-08-23)
+
+### Options & UI Fixes
+- Fixed vertical positioning and bottom-edge clipping of nested submenus (such
+  as the View menu's "Show" submenu). Submenus now clamp within the window
+  boundaries and no longer extend off the bottom of the screen.
+- Fixed "Restore Defaults" in Settings to reset per-folder view preferences and
+  reset active open tabs to default view mode (.details) and sort order.
+- Fixed runaway drag-resizing in `PaneSplitter` and `NavResizeDivider` by
+  tracking incremental translation deltas rather than cumulative offsets.
+- Added the custom Windows 11-styled "About Explorerr" dialog to the application menu.
+
+### Integrated Terminal Experience
+- Auto-focus terminal on reveal: toggling the terminal with `F4` or `⌥⌘T`
+  automatically makes the terminal text view active so you can start typing immediately.
+- Automatic CWD synchronization on reveal: opening the terminal now auto-CDs to
+  the active folder if navigation occurred while the terminal was closed.
+- Added `⌘K` shortcut to clear the terminal screen and scrollback buffer.
+- Added `⇧⇥` (Shift-Tab) translation to standard ANSI backtab (`\e[Z`) for reverse
+  autocompletion navigation in zsh and CLI tools like fzf.
+- Dynamic font zoom with `⌘+` / `⌘=` (zoom in), `⌘-` (zoom out), and `⌘0` (reset).
+- Right-click context menu in the terminal with Copy, Paste, Select All, Clear
+  Terminal, cd to Active Folder, and Restart Shell.
+- Drag-and-drop support: dragging files or folders into the terminal inserts
+  their shell-escaped paths directly at the prompt.
+- ANSI `CSI 3 J` support to clear the scrollback buffer via standard `clear` command.
+- Added support for colon-delimited 24-bit SGR color sequences (`\e[38:2::r:g:bm` /
+  `\e[38:2:r:g:bm`) used by modern CLI tools (`bat`, `delta`, `exa`, `rustc`).
+- Protected against terminal hangs on invalid/binary output by bounding split UTF-8
+  recovery and falling back to lossy UTF-8 decoding.
+
 ## 1.1.6 (2026-08-23)
 
 ### Options / dropdown menus
