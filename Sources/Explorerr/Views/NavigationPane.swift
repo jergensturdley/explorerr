@@ -74,8 +74,10 @@ struct NavigationPane: View {
     private func rootNodes() -> [NavNode] {
         var nodes: [NavNode] = [
             NavNode(id: "home", label: "Home", location: .home, children: .nothing),
-            NavNode(id: "gallery", label: "Gallery", location: .gallery, children: .nothing),
         ]
+        if app.prefs.sidebarGallery {
+            nodes.append(NavNode(id: "gallery", label: "Gallery", location: .gallery, children: .nothing))
+        }
 
         let home = DirectoryLoader.homeURL
         for special in ["Desktop", "Downloads", "Documents", "Pictures", "Music", "Videos"] {
@@ -90,19 +92,23 @@ struct NavigationPane: View {
         }
 
         // Cloud storage
-        let cloud = DirectoryLoader.cloudStorageFolders()
-        let iCloud = home.appendingPathComponent("Library/Mobile Documents/com~apple~CloudDocs", isDirectory: true)
-        var cloudURLs = cloud
-        if FileManager.default.fileExists(atPath: iCloud.path) { cloudURLs.append(iCloud) }
-        if !cloudURLs.isEmpty {
+        if app.prefs.sidebarCloud {
+            let cloud = DirectoryLoader.cloudStorageFolders()
+            let iCloud = home.appendingPathComponent("Library/Mobile Documents/com~apple~CloudDocs", isDirectory: true)
+            var cloudURLs = cloud
+            if FileManager.default.fileExists(atPath: iCloud.path) { cloudURLs.append(iCloud) }
             for url in cloudURLs {
                 nodes.append(NavNode(id: "cloud:\(url.path)", label: cloudLabel(url), location: .folder(url), children: .folders(url)))
             }
         }
 
         nodes.append(NavNode(id: "thisPC", label: "This PC", location: .thisPC, children: .drives))
-        nodes.append(NavNode(id: "network", label: "Network", location: .network, children: .networkVolumes))
-        nodes.append(NavNode(id: "trash", label: "Recycle Bin", location: .trash, children: .nothing))
+        if app.prefs.sidebarNetwork {
+            nodes.append(NavNode(id: "network", label: "Network", location: .network, children: .networkVolumes))
+        }
+        if app.prefs.sidebarTrash {
+            nodes.append(NavNode(id: "trash", label: "Recycle Bin", location: .trash, children: .nothing))
+        }
         return nodes
     }
 

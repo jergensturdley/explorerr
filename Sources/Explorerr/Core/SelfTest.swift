@@ -208,6 +208,9 @@ enum SelfTest {
             let p = try? JSONDecoder().decode(Prefs.self, from: Data(legacy.utf8))
             expect(p?.showHidden == true && p?.showExtensions == false, "Prefs keeps stored values")
             expect(p?.syncTerminalCD == true && p?.foldersFirst == true, "Prefs defaults missing keys")
+            expect(p?.appearance == .system && p?.singleClickOpen == false && p?.newTabsOpenHome == true
+                   && p?.doubleClickEmptyGoesUp == true && p?.sidebarTrash == true && p?.showRecents == true,
+                   "Prefs defaults new UX options")
         }
 
         // Spatial arrow navigation over a 3×2 grid of frames

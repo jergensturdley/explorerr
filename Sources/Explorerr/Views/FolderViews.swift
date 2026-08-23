@@ -164,7 +164,7 @@ struct DetailsRow: View {
             fixedCell(item.kind, width: tab.columnWidths["type"] ?? 150)
             fixedCell(item.isDirectory ? "" : Fmt.size(item.sizeBytes), width: tab.columnWidths["size"] ?? 96, trailing: true)
         }
-        .frame(height: Win11.Metrics.rowHeightDetails)
+        .frame(height: app.prefs.compactRows ? 26 : Win11.Metrics.rowHeightDetails)
         .padding(.horizontal, 12)
         .background(
             RoundedRectangle(cornerRadius: 4, style: .continuous)
@@ -327,7 +327,7 @@ struct ListView: View {
 
     var body: some View {
         GeometryReader { geo in
-            let rowsPerColumn = max(1, Int(geo.size.height / 28))
+            let rowsPerColumn = max(1, Int(geo.size.height / (app.prefs.compactRows ? 24 : 28)))
             ScrollView(.horizontal, showsIndicators: true) {
                 ScrollViewReader { proxy in
                     HStack(alignment: .top, spacing: 28) {
@@ -378,7 +378,7 @@ struct ListRow: View {
                 .truncationMode(.middle)
             Spacer(minLength: 0)
         }
-        .frame(height: Win11.Metrics.rowHeightList)
+        .frame(height: app.prefs.compactRows ? 24 : Win11.Metrics.rowHeightList)
         .padding(.horizontal, 7)
         .background(
             RoundedRectangle(cornerRadius: 4, style: .continuous)

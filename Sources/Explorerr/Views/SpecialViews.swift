@@ -30,7 +30,7 @@ struct HomeView: View {
                     }
                 }
 
-                if !app.recents.isEmpty {
+                if app.prefs.showRecents, !app.recents.isEmpty {
                     Rectangle().fill(p.divider).frame(height: 1)
 
                     sectionHeader("Recent files", systemImage: "clock.arrow.circlepath")

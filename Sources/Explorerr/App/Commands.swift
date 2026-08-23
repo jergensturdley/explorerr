@@ -17,7 +17,7 @@ struct ExplorerCommands: Commands {
                 .keyboardShortcut("n", modifiers: .command)
 
                 Button("New Tab") {
-                    paneController?.addTab(.home)
+                    paneController?.addTab()
                 }
                 .keyboardShortcut("t", modifiers: .command)
 

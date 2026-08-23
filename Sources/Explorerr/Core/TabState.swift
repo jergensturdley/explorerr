@@ -421,8 +421,13 @@ final class TabController: ObservableObject {
 
     var active: TabState { tabs.first { $0.id == activeID } ?? tabs[0] }
 
+    /// Where a fresh tab opens when no location is given (Options: Home page or ~).
+    private var defaultNewTabLocation: Location {
+        app.prefs.newTabsOpenHome ? .home : .folder(DirectoryLoader.homeURL)
+    }
+
     func addTab(_ location: Location? = nil, activate: Bool = true) {
-        let tab = TabState(app: app, location: location ?? .home)
+        let tab = TabState(app: app, location: location ?? defaultNewTabLocation)
         tabs.append(tab)
         if activate { activeID = tab.id }
         app.tabsChanged()
@@ -433,7 +438,7 @@ final class TabController: ObservableObject {
         rememberClosed(tabs[idx].location)
         tabs.remove(at: idx)
         if tabs.isEmpty {
-            tabs = [TabState(app: app, location: .home)]
+            tabs = [TabState(app: app, location: defaultNewTabLocation)]
         }
         if activeID == id {
             activeID = tabs[min(idx, tabs.count - 1)].id

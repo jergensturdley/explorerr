@@ -236,6 +236,8 @@ struct ItemInteractions: ViewModifier {
             // One immediate tap recognizer with manual double-click detection: the first
             // click selects instantly (no double-tap-failure delay), the second click
             // within the system interval opens. Modifiers are read live from NSEvent.
+            // With "single-click to open" (Windows Folder Options), the first plain
+            // click opens directly; modifiers still select.
             .onTapGesture {
                 let mods = NSEvent.modifierFlags
                 let now = Date()
@@ -245,6 +247,14 @@ struct ItemInteractions: ViewModifier {
                     tab.clickSelect(index: index, item: item, shift: true)
                 } else if mods.contains(.command) {
                     tab.clickSelect(index: index, item: item, command: true)
+                } else if app.prefs.singleClickOpen {
+                    if mods.contains(.option) {
+                        app.activeSheet = .properties(item.url)
+                    } else if item.isDirectory {
+                        tab.navigate(.folder(item.url))
+                    } else {
+                        FileOps.open(item.url, app: app)
+                    }
                 } else if isDouble {
                     lastClickAt = .distantPast // a triple click shouldn't re-open
                     if mods.contains(.option) {

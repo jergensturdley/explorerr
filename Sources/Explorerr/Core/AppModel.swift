@@ -199,6 +199,7 @@ final class AppModel: ObservableObject {
     // MARK: recents
 
     func recordRecent(_ url: URL) {
+        guard prefs.showRecents else { return }
         var r = recents.filter { $0.path != url.path }
         r.insert(RecentItem(path: url.path, name: url.lastPathComponent, date: Date()), at: 0)
         if r.count > 40 { r = Array(r.prefix(40)) }

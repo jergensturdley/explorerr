@@ -1,6 +1,6 @@
 import SwiftUI
 
-/// Windows-style "Folder Options" preferences.
+/// Windows-style "Folder Options" preferences: General / Appearance / Files.
 struct SettingsView: View {
     @EnvironmentObject var app: AppModel
     @Environment(\.colorScheme) private var scheme
@@ -9,36 +9,53 @@ struct SettingsView: View {
     var body: some View {
         TabView {
             generalTab.tabItem { Label("General", systemImage: "gearshape") }
-            viewTab.tabItem { Label("View", systemImage: "eye") }
+            appearanceTab.tabItem { Label("Appearance", systemImage: "paintbrush") }
+            filesTab.tabItem { Label("Files", systemImage: "doc.on.doc") }
         }
-        .frame(width: 480, height: 420)
+        .frame(width: 520, height: 520)
+        .onReceive(NotificationCenter.default.publisher(for: NSApplication.didBecomeActiveNotification)) { _ in
+            fullDiskAccess = DiskAccess.hasFullDiskAccess
+        }
     }
+
+    // Binding into app.prefs without repeating the get/set dance per row.
+    private func pref<T>(_ keyPath: WritableKeyPath<Prefs, T>) -> Binding<T> {
+        Binding(
+            get: { app.prefs[keyPath: keyPath] },
+            set: { app.prefs[keyPath: keyPath] = $0 }
+        )
+    }
+
+    // MARK: General
 
     private var generalTab: some View {
         Form {
-            Picker("Open new windows to", selection: Binding(
-                get: { app.prefs.startupHome },
-                set: { app.prefs.startupHome = $0 }
-            )) {
+            Picker("Open new windows to", selection: pref(\.startupHome)) {
                 Text("Home").tag(true)
                 Text("Home folder (~)").tag(false)
             }
             .pickerStyle(.radioGroup)
 
-            Toggle("Ask for confirmation before deleting", isOn: Binding(
-                get: { app.prefs.confirmDelete },
-                set: { app.prefs.confirmDelete = $0 }
-            ))
+            Picker("Open new tabs to", selection: pref(\.newTabsOpenHome)) {
+                Text("Home").tag(true)
+                Text("Home folder (~)").tag(false)
+            }
+            .pickerStyle(.radioGroup)
 
-            Toggle("Search all subfolders by default", isOn: Binding(
-                get: { app.prefs.searchAllSubfolders },
-                set: { app.prefs.searchAllSubfolders = $0 }
-            ))
+            Section("Click behavior") {
+                Picker("Open items with", selection: pref(\.singleClickOpen)) {
+                    Text("Double-click (select with single click)").tag(false)
+                    Text("Single click (select with checkboxes or keyboard)").tag(true)
+                }
+                .pickerStyle(.radioGroup)
+                .labelsHidden()
 
-            Toggle("Terminal follows navigation (cd when idle)", isOn: Binding(
-                get: { app.prefs.syncTerminalCD },
-                set: { app.prefs.syncTerminalCD = $0 }
-            ))
+                Toggle("Double-click empty space to go up one folder", isOn: pref(\.doubleClickEmptyGoesUp))
+            }
+
+            Section("Terminal") {
+                Toggle("Terminal follows navigation (cd when idle)", isOn: pref(\.syncTerminalCD))
+            }
 
             Section("File access") {
                 HStack(spacing: 6) {
@@ -58,12 +75,41 @@ struct SettingsView: View {
             }
         }
         .padding(18)
-        .onReceive(NotificationCenter.default.publisher(for: NSApplication.didBecomeActiveNotification)) { _ in
-            fullDiskAccess = DiskAccess.hasFullDiskAccess
-        }
     }
 
-    private var viewTab: some View {
+    // MARK: Appearance
+
+    private var appearanceTab: some View {
+        Form {
+            Picker("Theme", selection: pref(\.appearance)) {
+                ForEach(AppearanceMode.allCases, id: \.self) { mode in
+                    Text(mode.title).tag(mode)
+                }
+            }
+            .pickerStyle(.radioGroup)
+
+            Section("Density") {
+                Toggle("Compact rows in Details and List views", isOn: pref(\.compactRows))
+            }
+
+            Section("Panels") {
+                Toggle("Show status bar", isOn: pref(\.statusVisible))
+                Toggle("Show details pane", isOn: pref(\.showDetailsPane))
+            }
+
+            Section("Sidebar") {
+                Toggle("Gallery", isOn: pref(\.sidebarGallery))
+                Toggle("Cloud storage", isOn: pref(\.sidebarCloud))
+                Toggle("Network", isOn: pref(\.sidebarNetwork))
+                Toggle("Recycle Bin", isOn: pref(\.sidebarTrash))
+            }
+        }
+        .padding(18)
+    }
+
+    // MARK: Files
+
+    private var filesTab: some View {
         Form {
             Toggle("Show hidden files, folders, and drives", isOn: Binding(
                 get: { app.prefs.showHidden },
@@ -72,39 +118,33 @@ struct SettingsView: View {
                     app.reloadAllTabs()
                 }
             ))
-            Toggle("Show file name extensions", isOn: Binding(
-                get: { app.prefs.showExtensions },
-                set: { app.prefs.showExtensions = $0 }
-            ))
-            Toggle("Keep folders on top when sorting", isOn: Binding(
-                get: { app.prefs.foldersFirst },
-                set: { app.prefs.foldersFirst = $0 }
-            ))
-            Toggle("Show status bar", isOn: Binding(
-                get: { app.prefs.statusVisible },
-                set: { app.prefs.statusVisible = $0 }
-            ))
+            Toggle("Show file name extensions", isOn: pref(\.showExtensions))
+            Toggle("Keep folders on top when sorting", isOn: pref(\.foldersFirst))
+            Toggle("Ask for confirmation before deleting", isOn: pref(\.confirmDelete))
+            Toggle("Search all subfolders by default", isOn: pref(\.searchAllSubfolders))
+
+            Section("Privacy") {
+                Toggle("Track and show recent files on Home", isOn: pref(\.showRecents))
+                HStack {
+                    Spacer()
+                    Button("Clear recent files") { app.recents = [] }
+                        .disabled(app.recents.isEmpty)
+                }
+            }
 
             Section {
                 HStack {
                     Spacer()
+                    Button("Clear per-folder view memory") { app.folderPrefs = [:] }
+                }
+                HStack {
+                    Spacer()
                     Button("Restore Defaults") {
-                        app.prefs = Prefs()
+                        var fresh = Prefs()
+                        fresh.didPrimeFolderAccess = app.prefs.didPrimeFolderAccess
+                        app.prefs = fresh
                         app.reloadAllTabs()
                     }
-                }
-                HStack {
-                    Spacer()
-                    Button("Clear per-folder view memory") {
-                        app.folderPrefs = [:]
-                    }
-                }
-                HStack {
-                    Spacer()
-                    Button("Clear recent files") {
-                        app.recents = []
-                    }
-                    .disabled(app.recents.isEmpty)
                 }
             }
         }

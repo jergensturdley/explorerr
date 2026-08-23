@@ -45,7 +45,7 @@ struct MainWindow: View {
         withDialogs(
             rootContent
                 .onAppear {
-                    theme.scheme = systemScheme
+                    applyAppearance()
                     installMonitors()
                     if windowModel.terminalVisible {
                         terminal.launchIfNeeded(cwd: windowModel.activeTab.currentFolderURL)
@@ -61,7 +61,8 @@ struct MainWindow: View {
                     QuickLook.dismissIfVisible()
                     terminal.terminate()
                 }
-                .onChange(of: systemScheme) { theme.scheme = $0 }
+                .onChange(of: systemScheme) { _ in applyAppearance() }
+                .onChange(of: app.prefs.appearance) { _ in applyAppearance() }
                 .onReceive(NotificationCenter.default.publisher(for: .explorerrOpenInNewTab)) { note in
                     if let loc = note.object as? Location {
                         windowModel.activePane.controller.addTab(loc)
@@ -197,6 +198,22 @@ struct MainWindow: View {
 
     private var themeDivider: Color { Win11.palette(theme.scheme).divider }
 
+    /// Resolve the theme from Options (System/Light/Dark). NSApp.appearance is set too
+    /// so native pieces (context menus, sheets, the Settings window) match.
+    private func applyAppearance() {
+        switch app.prefs.appearance {
+        case .system:
+            theme.scheme = systemScheme
+            NSApp.appearance = nil
+        case .light:
+            theme.scheme = .light
+            NSApp.appearance = NSAppearance(named: .aqua)
+        case .dark:
+            theme.scheme = .dark
+            NSApp.appearance = NSAppearance(named: .darkAqua)
+        }
+    }
+
     /// Width the caption buttons need at the trailing end of the titlebar row (3 × 46 + spacer).
     private let windowControlsReserve: CGFloat = 142
 
@@ -286,7 +303,7 @@ struct MainWindow: View {
 
         // Pane activation, middle-click (close tab / open folder in new tab) and
         // mouse back/forward buttons (Windows mice).
-        mouseMonitor = NSEvent.addLocalMonitorForEvents(matching: [.leftMouseDown, .rightMouseDown, .otherMouseDown]) { [weak windowModel, weak chrome] event in
+        mouseMonitor = NSEvent.addLocalMonitorForEvents(matching: [.leftMouseDown, .rightMouseDown, .otherMouseDown]) { [weak windowModel, weak chrome, weak app] event in
             guard let model = windowModel, let window = event.window else { return event }
             // Monitors are app-wide: only handle events for this window (not sheets,
             // panels or other Explorerr windows).
@@ -351,7 +368,7 @@ struct MainWindow: View {
             // Lives here, not in a SwiftUI count:2 recognizer: the monitor has the
             // real event, runs before all recognizers, and can hit-test item frames
             // so double-clicks on items never navigate up.
-            if event.type == .leftMouseDown, event.clickCount == 2 {
+            if event.type == .leftMouseDown, event.clickCount == 2, app?.prefs.doubleClickEmptyGoesUp == true {
                 for pane in model.panes {
                     let tab = pane.controller.active
                     guard case .folder = tab.location, !tab.isSearching,

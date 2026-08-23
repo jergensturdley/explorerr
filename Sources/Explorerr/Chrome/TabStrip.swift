@@ -26,7 +26,7 @@ struct PaneTabStrip: View {
                         } onCloseRight: {
                             controller.closeRight(of: tab.id)
                         } onNewTab: {
-                            controller.addTab(.home)
+                            controller.addTab()
                         } onReorder: { draggedID in
                             controller.moveTab(draggedID, onto: tab.id)
                         }
@@ -36,7 +36,7 @@ struct PaneTabStrip: View {
             }
 
             Button {
-                controller.addTab(.home)
+                controller.addTab()
             } label: {
                 Image(systemName: "plus")
                     .font(.system(size: 12, weight: .medium))

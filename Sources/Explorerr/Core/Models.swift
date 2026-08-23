@@ -129,6 +129,19 @@ struct FolderPrefs: Codable {
     var hidden: Bool?
 }
 
+/// Forced appearance for the whole app (System follows macOS).
+enum AppearanceMode: String, Codable, CaseIterable {
+    case system, light, dark
+
+    var title: String {
+        switch self {
+        case .system: return "System"
+        case .light: return "Light"
+        case .dark: return "Dark"
+        }
+    }
+}
+
 struct Prefs: Codable {
     var showHidden: Bool = false
     var showExtensions: Bool = true
@@ -142,6 +155,23 @@ struct Prefs: Codable {
     var syncTerminalCD: Bool = true
     /// One-time: the Desktop/Documents/Downloads permission prompts were triggered at launch.
     var didPrimeFolderAccess: Bool = false
+    /// Appearance override (Win11 theme is drawn from our palettes, so this is app-wide).
+    var appearance: AppearanceMode = .system
+    /// Denser Details/List rows (Explorer 11 "compact view").
+    var compactRows: Bool = false
+    /// Windows Folder Options classic: single click opens items, modifiers still select.
+    var singleClickOpen: Bool = false
+    /// New tabs open Home (the quick-access page) or the home folder (~).
+    var newTabsOpenHome: Bool = true
+    /// Dolphin nicety: double-clicking empty content space goes up one folder.
+    var doubleClickEmptyGoesUp: Bool = true
+    /// Track and show recent files on the Home page.
+    var showRecents: Bool = true
+    /// Sidebar sections.
+    var sidebarGallery: Bool = true
+    var sidebarCloud: Bool = true
+    var sidebarNetwork: Bool = true
+    var sidebarTrash: Bool = true
 
     init() {}
 
@@ -158,6 +188,16 @@ struct Prefs: Codable {
         showDetailsPane = try c.decodeIfPresent(Bool.self, forKey: .showDetailsPane) ?? false
         syncTerminalCD = try c.decodeIfPresent(Bool.self, forKey: .syncTerminalCD) ?? true
         didPrimeFolderAccess = try c.decodeIfPresent(Bool.self, forKey: .didPrimeFolderAccess) ?? false
+        appearance = try c.decodeIfPresent(AppearanceMode.self, forKey: .appearance) ?? .system
+        compactRows = try c.decodeIfPresent(Bool.self, forKey: .compactRows) ?? false
+        singleClickOpen = try c.decodeIfPresent(Bool.self, forKey: .singleClickOpen) ?? false
+        newTabsOpenHome = try c.decodeIfPresent(Bool.self, forKey: .newTabsOpenHome) ?? true
+        doubleClickEmptyGoesUp = try c.decodeIfPresent(Bool.self, forKey: .doubleClickEmptyGoesUp) ?? true
+        showRecents = try c.decodeIfPresent(Bool.self, forKey: .showRecents) ?? true
+        sidebarGallery = try c.decodeIfPresent(Bool.self, forKey: .sidebarGallery) ?? true
+        sidebarCloud = try c.decodeIfPresent(Bool.self, forKey: .sidebarCloud) ?? true
+        sidebarNetwork = try c.decodeIfPresent(Bool.self, forKey: .sidebarNetwork) ?? true
+        sidebarTrash = try c.decodeIfPresent(Bool.self, forKey: .sidebarTrash) ?? true
     }
 }
 
