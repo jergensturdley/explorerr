@@ -60,6 +60,7 @@ final class PtyProcess {
         autoload -Uz colors && colors
         PS1='%F{cyan}%1~%f %# '
         export CLICOLOR=1
+        export LSCOLORS="Gxfxcxdxbxegedabagacad"
         """
         try? rc.write(to: dir.appendingPathComponent(".zshrc"), atomically: true, encoding: .utf8)
         return dir

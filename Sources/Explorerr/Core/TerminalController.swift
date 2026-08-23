@@ -171,14 +171,14 @@ final class TerminalController: ObservableObject {
 
     // MARK: rendering
 
-    /// Windows Terminal Campbell palette (indexed 0–15) + xterm 256/truecolor.
+    /// Windows Terminal Campbell Powershell palette (indexed 0–15) + xterm 256/truecolor.
     static let defaultBackground = NSColor(red: 0x0C / 255, green: 0x0C / 255, blue: 0x0C / 255, alpha: 1)
     static let defaultForeground = NSColor(red: 0xCC / 255, green: 0xCC / 255, blue: 0xCC / 255, alpha: 1)
     private static let palette: [NSColor] = [
         NSColor(hex: 0x0C0C0C), NSColor(hex: 0xC50F1F), NSColor(hex: 0x13A10E), NSColor(hex: 0xC19C00),
-        NSColor(hex: 0x0037DA), NSColor(hex: 0x881798), NSColor(hex: 0x3A96DD), NSColor(hex: 0xCCCCCC),
+        NSColor(hex: 0x3B78FF), NSColor(hex: 0x881798), NSColor(hex: 0x3A96DD), NSColor(hex: 0xCCCCCC),
         NSColor(hex: 0x767676), NSColor(hex: 0xE74856), NSColor(hex: 0x16C60C), NSColor(hex: 0xF9F1A5),
-        NSColor(hex: 0x3B78FF), NSColor(hex: 0xB4009E), NSColor(hex: 0x61D6D6), NSColor(hex: 0xF2F2F2),
+        NSColor(hex: 0x689CFF), NSColor(hex: 0xB4009E), NSColor(hex: 0x61D6D6), NSColor(hex: 0xF2F2F2),
     ]
 
     static func color(_ term: TermColor, isBackground: Bool) -> NSColor {

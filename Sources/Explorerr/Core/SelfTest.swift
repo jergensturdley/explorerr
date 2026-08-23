@@ -130,6 +130,9 @@ enum SelfTest {
             expect(vt.cell(row: 0, col: 3).fg == .indexed(1), "SGR red applied")
             expect(vt.cell(row: 0, col: 7).fg == .default, "SGR reset applied")
 
+            vt.feed("abc\ndef")
+            expect(vt.text(inRow: 1).hasPrefix("def"), "newline resets cursorCol to 0 (no stair-stepping)")
+            expect(vt.cursorRow == 1 && vt.cursorCol == 3, "cursor position after newline and text")
             vt.feed("\u{1B}[2;3H") // CUP row 2, col 3
             expect(vt.cursorRow == 1 && vt.cursorCol == 2, "CUP cursor positioning")
 

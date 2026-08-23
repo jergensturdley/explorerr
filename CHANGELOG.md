@@ -1,5 +1,15 @@
 # Changelog
 
+## 1.1.9 (2026-08-23)
+
+### Terminal Rendering & Legibility Fixes
+- Fixed diagonal stair-stepping output (e.g. `ls` output scattering across the
+  screen) by ensuring newline characters (`\n`) automatically reset the cursor
+  column to 0.
+- Brightened the standard dark blue palette color to vibrant Campbell Powershell
+  blue (`#3B78FF`) and added bright `LSCOLORS` to the clean profile, dramatically
+  improving folder name readability on dark backgrounds.
+
 ## 1.1.8 (2026-08-23)
 
 ### Header & Command Bar Layout

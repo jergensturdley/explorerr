@@ -87,15 +87,26 @@ final class TerminalEmulator {
     private func ground(_ ch: Character) {
         switch ch {
         case "\u{1B}": state = .esc
-        case "\n", "\u{0B}", "\u{0C}": linefeed()
-        case "\r": cursorCol = 0; pendingWrap = false
+        case "\n", "\u{0B}", "\u{0C}":
+            cursorCol = 0
+            pendingWrap = false
+            linefeed()
+        case "\r":
+            cursorCol = 0
+            pendingWrap = false
         case "\t":
             let next = ((cursorCol / 8) + 1) * 8
             cursorCol = min(next, cols - 1)
+            pendingWrap = false
         case "\u{08}": cursorCol = max(0, cursorCol - 1); pendingWrap = false
         case "\u{07}": break // BEL
         default:
-            if ch.isNewline { linefeed(); return }
+            if ch.isNewline {
+                cursorCol = 0
+                pendingWrap = false
+                linefeed()
+                return
+            }
             let scalars = ch.unicodeScalars
             if scalars.allSatisfy({ $0.value != 0 && $0.value != 0x7F }) {
                 putChar(ch)
