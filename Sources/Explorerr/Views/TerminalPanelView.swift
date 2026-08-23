@@ -173,15 +173,27 @@ struct RoundedCornersShape: Shape {
 // MARK: - AppKit host
 
 struct TerminalHostView: NSViewRepresentable {
-    @ObservedObject var controller: TerminalController
+    let controller: TerminalController
     let currentFolder: () -> URL?
     let onFocusChange: (Bool) -> Void
-
     final class TerminalTextView: NSTextView {
         weak var controller: TerminalController?
         var currentFolderProvider: (() -> URL?)?
+        var onUserActivity: (() -> Void)?
+
+        override func scrollWheel(with event: NSEvent) {
+            super.scrollWheel(with: event)
+            if let scroll = enclosingScrollView {
+                let docH = frame.height
+                let visMaxY = scroll.contentView.bounds.origin.y + scroll.contentView.bounds.height
+                if docH - visMaxY <= 16 {
+                    onUserActivity?()
+                }
+            }
+        }
 
         override func keyDown(with event: NSEvent) {
+            onUserActivity?()
             guard let controller else { super.keyDown(with: event); return }
             let mods = event.modifierFlags.intersection(.deviceIndependentFlagsMask)
 
@@ -333,6 +345,10 @@ struct TerminalHostView: NSViewRepresentable {
         textView.font = controller.font
         textView.isVerticallyResizable = true
         textView.isHorizontallyResizable = false
+        textView.isAutomaticQuoteSubstitutionEnabled = false
+        textView.isAutomaticDashSubstitutionEnabled = false
+        textView.isAutomaticTextReplacementEnabled = false
+        textView.isAutomaticSpellingCorrectionEnabled = false
         textView.textContainer?.widthTracksTextView = true
         textView.textContainerInset = NSSize(width: 10, height: 8)
 
@@ -344,9 +360,33 @@ struct TerminalHostView: NSViewRepresentable {
         scroll.drawsBackground = true
         scroll.backgroundColor = TerminalController.defaultBackground
         scroll.scrollerStyle = .overlay
+        scroll.contentView.postsBoundsChangedNotifications = true
 
         context.coordinator.textView = textView
         context.coordinator.scroll = scroll
+
+        let coordinator = context.coordinator
+        textView.onUserActivity = { [weak coordinator] in
+            coordinator?.userScrolledUp = false
+        }
+
+        // Track when user manually scrolls up/down
+        coordinator.observer = NotificationCenter.default.addObserver(
+            forName: NSView.boundsDidChangeNotification,
+            object: scroll.contentView,
+            queue: .main
+        ) { [weak scroll, weak textView, weak coordinator] _ in
+            guard let scroll, let textView, let coordinator else { return }
+            let docH = textView.frame.height
+            let clipH = scroll.contentView.bounds.height
+            let curY = scroll.contentView.bounds.origin.y
+            let distFromBottom = docH - (curY + clipH)
+            if distFromBottom <= 16 {
+                coordinator.userScrolledUp = false
+            } else if distFromBottom > 36 {
+                coordinator.userScrolledUp = true
+            }
+        }
 
         // Auto-focus on appear so typing works immediately without an extra mouse click
         DispatchQueue.main.async {
@@ -358,13 +398,6 @@ struct TerminalHostView: NSViewRepresentable {
 
     func updateNSView(_ scroll: NSScrollView, context: Context) {
         guard let textView = context.coordinator.textView else { return }
-
-        // Follow-output: keep pinned to the bottom only if the user was at the bottom
-        let docHeight = textView.frame.height
-        let visible = scroll.contentView.visibleRect
-        let wasAtBottom = visible.maxY >= docHeight - controller.lineHeight * 2
-            || context.coordinator.lastDocHeight == 0
-        context.coordinator.lastDocHeight = docHeight
 
         let focusedNow = NSApp.keyWindow?.firstResponder === textView
         if context.coordinator.lastFocused != focusedNow {
@@ -380,10 +413,9 @@ struct TerminalHostView: NSViewRepresentable {
             textView.setSelectedRange(NSRange(location: loc, length: len))
         }
 
-        if wasAtBottom {
-            let bottom = NSPoint(x: 0, y: max(0, textView.frame.height - scroll.contentView.bounds.height))
-            scroll.contentView.scroll(to: bottom)
-            scroll.reflectScrolledClipView(scroll.contentView)
+        // Force synchronous layout manager run so textView.frame.height is exact immediately
+        if let layoutManager = textView.layoutManager, let textContainer = textView.textContainer {
+            layoutManager.ensureLayout(for: textContainer)
         }
 
         // Viewport → cols/rows (keeps the pty grid in sync with the visible area)
@@ -392,6 +424,16 @@ struct TerminalHostView: NSViewRepresentable {
             height: scroll.contentSize.height,
             padding: 10
         )
+
+        // Smooth autoscroll to bottom: if user hasn't explicitly scrolled up
+        if !context.coordinator.userScrolledUp {
+            let maxScrollY = max(0, textView.frame.height - scroll.contentView.bounds.height)
+            let target = NSPoint(x: 0, y: maxScrollY)
+            if abs(scroll.contentView.bounds.origin.y - target.y) > 0.5 {
+                scroll.contentView.scroll(to: target)
+                scroll.reflectScrolledClipView(scroll.contentView)
+            }
+        }
     }
 
     func makeCoordinator() -> Coordinator { Coordinator() }
@@ -400,7 +442,14 @@ struct TerminalHostView: NSViewRepresentable {
         weak var textView: TerminalTextView?
         weak var scroll: NSScrollView?
         var lastFocused = false
-        var lastDocHeight: CGFloat = 0
+        var userScrolledUp = false
+        var observer: Any?
+
+        deinit {
+            if let observer {
+                NotificationCenter.default.removeObserver(observer)
+            }
+        }
     }
 }
 

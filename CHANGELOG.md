@@ -1,5 +1,16 @@
 # Changelog
 
+## 1.1.10 (2026-08-23)
+
+### Smooth Scrolling & Autoscroll
+- Fixed jerky terminal scrolling by forcing synchronous layout manager geometry
+  calculation (`layoutManager.ensureLayout(for:)`) before calculating document
+  scroll bounds, eliminating 1-frame position lag.
+- Implemented smart autoscroll: output automatically sticks to the bottom when
+  new text arrives or when user types input. If the user manually scrolls up to
+  review scrollback history, auto-scrolling pauses so text does not jump, and
+  smoothly resumes when scrolling back to the bottom.
+
 ## 1.1.9 (2026-08-23)
 
 ### Terminal Rendering & Legibility Fixes
