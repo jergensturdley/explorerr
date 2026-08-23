@@ -313,6 +313,8 @@ struct ShortcutsSheet: View {
         ("New folder", "⇧⌘N"), ("Open…", "⌘O"), ("Properties", "⌘I or ⌥↩ or ⌥double-click"),
         ("Copy / Cut / Paste", "⌘C / ⌘X / ⌘V"), ("Copy as path", "⇧⌘C"),
         ("Select all / invert selection", "⌘A / ⇧⌘A"), ("Duplicate", "⌘D"),
+        ("Add selection to Shelf", "⇧⌘S or right-click"),
+        ("Shelf: place items", "Copy here / Move here buttons"),
         ("Undo / Redo", "⌘Z / ⇧⌘Z"), ("Rename", "F2"),
         ("Move to Recycle Bin", "⌘⌫ or fn⌫"), ("Empty Recycle Bin", "⇧⌘⌫"),
         ("Go up (parent folder)", "Backspace, ⌥↑ or ⌘↑"),

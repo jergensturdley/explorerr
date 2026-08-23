@@ -25,6 +25,7 @@ enum Store {
         static let navExpanded = "explorerr.navExpanded"
         static let navWidth = "explorerr.navWidth"
         static let trashOrigins = "explorerr.trashOrigins"
+        static let shelf = "explorerr.shelf"
     }
 
     // MARK: accessors
@@ -68,4 +69,7 @@ enum Store {
 
     static func loadTrashOrigins() -> [String: String] { get([String: String].self, forKey: K.trashOrigins) ?? [:] }
     static func saveTrashOrigins(_ m: [String: String]) { set(m, forKey: K.trashOrigins) }
+
+    static func loadShelf() -> [String] { get([String].self, forKey: K.shelf) ?? [] }
+    static func saveShelf(_ s: [String]) { set(s, forKey: K.shelf) }
 }

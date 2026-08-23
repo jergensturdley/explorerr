@@ -160,6 +160,12 @@ struct MainWindow: View {
                         }
                     }
 
+                    // The Shelf shows when it has content, or during an internal drag so
+                    // an empty shelf can still catch the drop.
+                    if !app.shelf.isEmpty || !app.draggingURLs.isEmpty {
+                        ShelfBar(app: app, windowModel: windowModel)
+                    }
+
                     if windowModel.terminalVisible {
                         TerminalResizeDivider(onDrag: { delta in
                             windowModel.terminalHeight = min(640, max(120, windowModel.terminalHeight - delta))
@@ -313,6 +319,12 @@ struct MainWindow: View {
             // full-height columns.
             let height = window.contentView?.bounds.height ?? window.frame.height
             let point = CGPoint(x: event.locationInWindow.x, y: height - event.locationInWindow.y)
+
+            // A cancelled drag never clears draggingURLs (onDrag has no completion
+            // callback); any fresh mouse-down means the previous drag is over.
+            if event.type == .leftMouseDown, let app, !app.draggingURLs.isEmpty {
+                app.draggingURLs = []
+            }
 
             // Middle click: close the tab under the cursor, or open the folder item
             // under the cursor in a background tab (Explorer/Dolphin/browsers).

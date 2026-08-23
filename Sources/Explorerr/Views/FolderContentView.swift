@@ -349,6 +349,7 @@ struct ItemInteractions: ViewModifier {
             pb.clearContents()
             pb.setString(selection.map { $0.url.path }.joined(separator: "\n"), forType: .string)
         }
+        Button("Add to Shelf") { app.addToShelf(selection.map { $0.url }) }
         Button("Duplicate") { Task { await FileOps.duplicate(selection, app: app) } }
 
         Menu("Send to") {

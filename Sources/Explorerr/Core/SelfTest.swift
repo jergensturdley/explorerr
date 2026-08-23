@@ -240,6 +240,23 @@ enum SelfTest {
             expect(BandSelect.isEmptySpace(point: CGPoint(x: 50, y: 100), clip: clip, origin: .zero, frames: [:]), "empty folder: anywhere in the clip counts")
         }
 
+        // Shelf: dedupe, order, remove (restore the user's persisted shelf afterwards —
+        // the @Published didSet writes straight through to UserDefaults)
+        do {
+            let app = AppModel()
+            let saved = app.shelf
+            app.shelf = []
+            let a = tmp.appendingPathComponent("a.txt")
+            let b = tmp.appendingPathComponent("report.txt")   // created earlier in this run
+            FileManager.default.createFile(atPath: a.path, contents: Data())
+            app.addToShelf([a, b])
+            app.addToShelf([a])
+            expect(app.shelf == [a.path, b.path], "shelf dedupes and keeps order")
+            app.removeFromShelf(a.path)
+            expect(app.shelf == [b.path], "shelf removes a single entry")
+            app.shelf = saved
+        }
+
         // Tab reorder + reopen-closed-tab
         do {
             let app = AppModel()

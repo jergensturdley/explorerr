@@ -130,6 +130,11 @@ final class AppModel: ObservableObject {
     @Published var trashOrigins: [String: String] {
         didSet { Store.saveTrashOrigins(trashOrigins) }
     }
+    /// The Shelf: file paths staged in limbo while browsing, later copied or moved
+    /// into a destination. Shared across windows, persists across launches.
+    @Published var shelf: [String] {
+        didSet { Store.saveShelf(shelf) }
+    }
     @Published var navWidth: CGFloat = Win11.Metrics.navPaneDefaultWidth {
         didSet { UserDefaults.standard.set(Double(navWidth), forKey: "explorerr.navWidth") }
     }
@@ -162,6 +167,7 @@ final class AppModel: ObservableObject {
         recents = Store.loadRecents()
         navExpanded = Store.loadNavExpanded()
         trashOrigins = Store.loadTrashOrigins()
+        shelf = Store.loadShelf()
         let w = Store.loadNavWidth()
         navWidth = (w == 0) ? Win11.Metrics.navPaneDefaultWidth : w
         if navExpanded.isEmpty { navExpanded = ["thisPC", "cloud"] }  // sensible defaults
@@ -194,6 +200,24 @@ final class AppModel: ObservableObject {
         var fp = folderPrefs[location.prefsKey] ?? FolderPrefs()
         update(&fp)
         folderPrefs[location.prefsKey] = fp
+    }
+
+    // MARK: shelf
+
+    /// Add files to the Shelf (deduped, keeps order, prunes vanished entries).
+    func addToShelf(_ urls: [URL]) {
+        guard !urls.isEmpty else { return }
+        var updated = shelf.filter { FileManager.default.fileExists(atPath: $0) }
+        for url in urls {
+            let path = url.standardizedFileURL.path
+            if !updated.contains(path) { updated.append(path) }
+        }
+        shelf = updated
+        toast("Shelved \(urls.count) item\(urls.count == 1 ? "" : "s")")
+    }
+
+    func removeFromShelf(_ path: String) {
+        shelf.removeAll { $0 == path }
     }
 
     // MARK: recents

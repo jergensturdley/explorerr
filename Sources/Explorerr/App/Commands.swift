@@ -165,6 +165,13 @@ struct ExplorerCommands: Commands {
             }
             .keyboardShortcut("d", modifiers: .command)
 
+            Button("Add to Shelf") {
+                if let tab = tab, let app = appModel, !tab.selectedItems.isEmpty {
+                    app.addToShelf(tab.selectedItems.map { $0.url })
+                }
+            }
+            .keyboardShortcut("s", modifiers: [.command, .shift])
+
             Divider()
 
             Button("Select All") {
