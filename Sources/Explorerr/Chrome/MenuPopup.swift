@@ -28,7 +28,7 @@ struct MenuHost: View {
                     let left = min(max(6, req.anchor.minX), max(6, geo.size.width - req.width - 6))
                     let top = max(6, min(req.anchor.maxY + 4, geo.size.height - panelHeight - 6))
 
-                    MenuPanelView(entries: req.entries, width: req.width, originX: left, windowWidth: geo.size.width, onDismiss: { coord.dismiss() })
+                    MenuPanelView(entries: req.entries, width: req.width, originX: left, originY: top, windowWidth: geo.size.width, windowHeight: geo.size.height, onDismiss: { coord.dismiss() })
                         .id(req.id)
                         .position(
                             x: left + req.width / 2,
@@ -47,9 +47,11 @@ struct MenuHost: View {
 struct MenuPanelView: View {
     let entries: [WinMenuEntry]
     let width: CGFloat
-    /// Window-space left edge of this panel (needed so nested submenus can flip).
+    /// Window-space left and top edges of this panel (needed so nested submenus can flip & clamp).
     var originX: CGFloat = 0
-    var windowWidth: CGFloat
+    var originY: CGFloat = 0
+    var windowWidth: CGFloat = 1100
+    var windowHeight: CGFloat = 700
     let onDismiss: () -> Void
 
     @EnvironmentObject var theme: Theme
@@ -61,6 +63,8 @@ struct MenuPanelView: View {
         let entries: [WinMenuEntry]
         let flip: Bool
         let originX: CGFloat
+        let originY: CGFloat
+        let offsetY: CGFloat
     }
 
     private static let childWidth: CGFloat = 216
@@ -81,7 +85,7 @@ struct MenuPanelView: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
-            ForEach(entries) { entry in
+            ForEach(Array(entries.enumerated()), id: \.element.id) { idx, entry in
                 switch entry.kind {
                 case .separator:
                     Rectangle()
@@ -97,10 +101,11 @@ struct MenuPanelView: View {
                         .padding(.top, 7)
                         .padding(.bottom, 3)
                 case .row(let row):
+                    let rowTopInPanel = Self.rowTop(forIndex: idx, in: entries)
                     MenuRowView(row: row, width: width) {
                         if let children = row.children {
                             hoverTask?.cancel()
-                            openChild = Self.makeChild(entry: entry, children: children, width: width, originX: originX, windowWidth: windowWidth)
+                            openChild = Self.makeChild(entry: entry, children: children, width: width, originX: originX, originY: originY, rowTopInPanel: rowTopInPanel, windowWidth: windowWidth, windowHeight: windowHeight)
                         } else {
                             onDismiss()
                             row.action?()
@@ -113,7 +118,7 @@ struct MenuPanelView: View {
                                 hoverTask = Task {
                                     try? await Task.sleep(nanoseconds: 130_000_000)
                                     guard !Task.isCancelled else { return }
-                                    openChild = Self.makeChild(entry: entry, children: row.children ?? [], width: width, originX: originX, windowWidth: windowWidth)
+                                    openChild = Self.makeChild(entry: entry, children: row.children ?? [], width: width, originX: originX, originY: originY, rowTopInPanel: rowTopInPanel, windowWidth: windowWidth, windowHeight: windowHeight)
                                 }
                             } else {
                                 openChild = nil
@@ -122,9 +127,9 @@ struct MenuPanelView: View {
                     }
                     .overlay(alignment: .topLeading) {
                         if let child = openChild, child.id == entry.id {
-                            MenuPanelView(entries: child.entries, width: Self.childWidth, originX: child.originX, windowWidth: windowWidth, onDismiss: onDismiss)
+                            MenuPanelView(entries: child.entries, width: Self.childWidth, originX: child.originX, originY: child.originY, windowWidth: windowWidth, windowHeight: windowHeight, onDismiss: onDismiss)
                                 .fixedSize()
-                                .offset(x: child.flip ? -(Self.childWidth + 4) : width + 4, y: -5)
+                                .offset(x: child.flip ? -(Self.childWidth + 4) : width + 4, y: child.offsetY)
                                 .zIndex(10)
                         }
                     }
@@ -144,13 +149,32 @@ struct MenuPanelView: View {
         .onDisappear { hoverTask?.cancel() }
     }
 
-    /// Builds a child submenu, flipping it left when it would run off the window's
-    /// right edge (the parent panel's window-space origin and widths are known here).
-    private static func makeChild(entry: WinMenuEntry, children: [WinMenuEntry], width: CGFloat, originX: CGFloat, windowWidth: CGFloat) -> ChildPanel {
+    private static func rowTop(forIndex targetIdx: Int, in entries: [WinMenuEntry]) -> CGFloat {
+        var y: CGFloat = 5 // top padding
+        for i in 0..<min(targetIdx, entries.count) {
+            switch entries[i].kind {
+            case .separator: y += 11
+            case .header: y += 24
+            case .row: y += 30
+            }
+        }
+        return y
+    }
+
+    /// Builds a child submenu, flipping it horizontally or clamping vertically so
+    /// it never runs off the window edges.
+    private static func makeChild(entry: WinMenuEntry, children: [WinMenuEntry], width: CGFloat, originX: CGFloat, originY: CGFloat, rowTopInPanel: CGFloat, windowWidth: CGFloat, windowHeight: CGFloat) -> ChildPanel {
         let fitsRight = originX + width + 4 + childWidth <= windowWidth - 6
         let flip = !fitsRight
         let childOriginX = flip ? originX - childWidth - 4 : originX + width + 4
-        return ChildPanel(id: entry.id, entries: children, flip: flip, originX: childOriginX)
+
+        let childHeight = height(for: children)
+        let rowTopInWindow = originY + rowTopInPanel
+        let naturalTop = rowTopInWindow - 5
+        let clampedTop = max(6, min(naturalTop, windowHeight - childHeight - 6))
+        let offsetY = clampedTop - rowTopInWindow
+
+        return ChildPanel(id: entry.id, entries: children, flip: flip, originX: childOriginX, originY: clampedTop, offsetY: offsetY)
     }
 }
 

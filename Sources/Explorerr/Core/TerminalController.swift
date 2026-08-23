@@ -11,11 +11,16 @@ final class TerminalController: ObservableObject {
     @Published var title = "Terminal"
     @Published var exited = false
 
-    let font = NSFont.monospacedSystemFont(ofSize: 12.5, weight: .regular)
-    lazy var cellWidth: CGFloat = ceil(NSAttributedString(string: "M", attributes: [.font: font]).size().width)
-    lazy var lineHeight: CGFloat = ceil(font.boundingRectForFont.height) + 1.5
-    lazy var boldFont: NSFont = NSFontManager.shared.convert(font, toHaveTrait: .boldFontMask)
+    @Published var fontSize: CGFloat = 12.5
 
+    var font: NSFont { NSFont.monospacedSystemFont(ofSize: fontSize, weight: .regular) }
+    var cellWidth: CGFloat { ceil(NSAttributedString(string: "M", attributes: [.font: font]).size().width) }
+    var lineHeight: CGFloat { ceil(font.boundingRectForFont.height) + 1.5 }
+    var boldFont: NSFont { NSFontManager.shared.convert(font, toHaveTrait: .boldFontMask) }
+
+    func zoomIn() { fontSize = min(24, fontSize + 1.5) }
+    func zoomOut() { fontSize = max(9, fontSize - 1.5) }
+    func resetZoom() { fontSize = 12.5 }
     private var pendingData = Data()
     private var drainScheduled = false
     private var lastCols = 80
@@ -85,19 +90,25 @@ final class TerminalController: ObservableObject {
             if let text = String(data: chunk, encoding: .utf8) {
                 self.emulator.feed(text)
             } else {
-                // Split multibyte sequence: try partial decode, stash the rest
+                // Split multibyte sequence: UTF-8 characters are at most 4 bytes long,
+                // so check if dropping the last 1-3 trailing bytes yields valid UTF-8.
                 var boundary = chunk.count
                 var decoded: String? = nil
-                while boundary > 0 {
+                let minBoundary = max(0, chunk.count - 4)
+                while boundary > minBoundary {
                     decoded = String(data: chunk.prefix(boundary), encoding: .utf8)
                     if decoded != nil { break }
                     boundary -= 1
                 }
                 if let text = decoded {
                     self.emulator.feed(text)
-                }
-                if boundary < chunk.count {
-                    self.pendingData = Data(chunk[boundary...])
+                    if boundary < chunk.count {
+                        self.pendingData = Data(chunk[boundary...])
+                    }
+                } else {
+                    // Binary or invalid UTF-8 data: perform lossy decoding and flush
+                    let fallback = String(decoding: chunk, as: UTF8.self)
+                    self.emulator.feed(fallback)
                 }
             }
             if self.emulator.title != self.title {
@@ -122,7 +133,7 @@ final class TerminalController: ObservableObject {
     /// Sends `cd <folder>` to the shell (Windows-terminal-style sync button).
     func cd(to url: URL) {
         let escaped = url.path.replacingOccurrences(of: "'", with: "'\\''")
-        send("cd '\(escaped)'\n")
+        send("\u{15}cd '\(escaped)'\n")
     }
 
     /// Dolphin-style automatic cwd sync on navigation. Only fires when it's safe:

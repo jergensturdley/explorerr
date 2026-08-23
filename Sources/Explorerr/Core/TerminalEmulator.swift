@@ -231,7 +231,8 @@ final class TerminalEmulator {
         }
         let params = csiBuffer
         let privateMarker = params.contains("?")
-        let numbers = params.filter { $0.isNumber || $0 == ";" || $0 == ":" }
+        let normalized = params.replacingOccurrences(of: ":", with: ";")
+        let numbers = normalized.filter { $0.isNumber || $0 == ";" }
             .split(separator: ";", omittingEmptySubsequences: false)
             .map { sub -> Int in Int(sub.filter { $0.isNumber }) ?? 0 }
         csiBuffer = ""
@@ -304,12 +305,14 @@ final class TerminalEmulator {
             if cursorRow > 0 {
                 for r in 0..<cursorRow { lines[r] = Array(repeating: blankCell(), count: cols) }
             }
-        case 2, 3:
+        case 2:
+            for r in 0..<rows { lines[r] = Array(repeating: blankCell(), count: cols) }
+        case 3:
+            scrollback = []
             for r in 0..<rows { lines[r] = Array(repeating: blankCell(), count: cols) }
         default: break
         }
     }
-
     private func eraseLine(_ mode: Int) {
         ensureRow()
         switch mode {
@@ -402,19 +405,28 @@ final class TerminalEmulator {
             case 90...97: fg = .indexed(UInt8(code - 90 + 8))
             case 100...107: bg = .indexed(UInt8(code - 100 + 8))
             case 38, 48:
-                // extended: 38;5;N or 38;2;R;G;B
+                // extended: 38;5;N or 38;2;R;G;B (also supports 38:2::R:G:B color space format)
                 if i + 1 < n.count {
                     if n[i + 1] == 5, i + 2 < n.count {
                         let color = TermColor.indexed(UInt8(max(0, min(255, n[i + 2]))))
                         if code == 38 { fg = color } else { bg = color }
                         i += 2
-                    } else if n[i + 1] == 2, i + 4 < n.count {
-                        let r = max(0, min(255, n[i + 2]))
-                        let g = max(0, min(255, n[i + 3]))
-                        let b = max(0, min(255, n[i + 4]))
-                        let color = TermColor.rgb(UInt32(r) << 16 | UInt32(g) << 8 | UInt32(b))
-                        if code == 38 { fg = color } else { bg = color }
-                        i += 4
+                    } else if n[i + 1] == 2 {
+                        if i + 5 < n.count && n[i + 2] == 0 {
+                            let r = max(0, min(255, n[i + 3]))
+                            let g = max(0, min(255, n[i + 4]))
+                            let b = max(0, min(255, n[i + 5]))
+                            let color = TermColor.rgb(UInt32(r) << 16 | UInt32(g) << 8 | UInt32(b))
+                            if code == 38 { fg = color } else { bg = color }
+                            i += 5
+                        } else if i + 4 < n.count {
+                            let r = max(0, min(255, n[i + 2]))
+                            let g = max(0, min(255, n[i + 3]))
+                            let b = max(0, min(255, n[i + 4]))
+                            let color = TermColor.rgb(UInt32(r) << 16 | UInt32(g) << 8 | UInt32(b))
+                            if code == 38 { fg = color } else { bg = color }
+                            i += 4
+                        }
                     }
                 }
             default: break

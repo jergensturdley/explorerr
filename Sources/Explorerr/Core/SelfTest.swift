@@ -133,13 +133,19 @@ enum SelfTest {
             vt.feed("\u{1B}[2;3H") // CUP row 2, col 3
             expect(vt.cursorRow == 1 && vt.cursorCol == 2, "CUP cursor positioning")
 
-            vt.feed("\u{1B}[38;5;196mX\u{1B}[0m\u{1B}[38;2;10;20;30mY")
+            vt.feed("\u{1B}[38;5;196mX\u{1B}[0m\u{1B}[38;2;10;20;30mY\u{1B}[0m\u{1B}[38:2::40:50:60mZ")
             expect(vt.cell(row: 1, col: 2).fg == .indexed(196), "256-color SGR")
             expect(vt.cell(row: 1, col: 3).fg == .rgb(0x0A141E), "truecolor SGR")
+            expect(vt.cell(row: 1, col: 4).fg == .rgb(0x28323C), "colon-syntax truecolor SGR")
+
+            // ED 2 vs ED 3 (scrollback clear)
+            for _ in 0..<10 { vt.feed("line\n") }
+            expect(!vt.scrollback.isEmpty, "scrollback populated")
+            vt.feed("\u{1B}[3J")
+            expect(vt.scrollback.isEmpty, "ED 3 clears scrollback")
 
             vt.feed("\u{1B}[2J")
             expect(vt.text(inRow: 0).trimmingCharacters(in: .whitespaces).isEmpty, "ED clears screen")
-
             let wide = TerminalEmulator(cols: 5, rows: 3) // cols clamps to the 10-col minimum
             wide.feed("abcdefghijk")
             expect(wide.text(inRow: 0) == "abcdefghij" && wide.text(inRow: 1).hasPrefix("k"), "line wrap on overflow")
@@ -155,6 +161,16 @@ enum SelfTest {
             shrink.resize(cols: 20, rows: 5)
             expect(shrink.text(inRow: 0).hasPrefix("hello"), "shrink keeps content on screen")
             expect(shrink.scrollback.isEmpty, "shrink trims blank rows before using scrollback")
+        }
+
+        // TerminalController font zoom
+        do {
+            let tc = TerminalController()
+            let initialSize = tc.fontSize
+            tc.zoomIn()
+            expect(tc.fontSize > initialSize, "terminal zoomIn increases font size")
+            tc.resetZoom()
+            expect(tc.fontSize == initialSize, "terminal resetZoom restores initial size")
         }
 
         // Formatters
@@ -311,6 +327,17 @@ enum SelfTest {
             tc.closeTab(ids[1])
             tc.reopenClosedTab()
             expect(tc.tabs.last?.location == .thisPC && tc.activeID == tc.tabs.last?.id, "reopenClosedTab restores the last closed location")
+        }
+
+        // Reset all tabs to defaults
+        do {
+            let app = AppModel()
+            let tc = TabController(app: app, locations: [.home])
+            tc.active.viewMode = .iconsLarge
+            tc.active.sortKey = .size
+            tc.active.sortAscending = false
+            app.resetAllTabsToDefaults()
+            expect(app.folderPrefs.isEmpty, "resetAllTabsToDefaults clears folderPrefs")
         }
 
         print(failures == 0 ? "SELFTEST PASSED (\(count) checks)" : "SELFTEST FAILED: \(failures)/\(count)")

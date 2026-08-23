@@ -9,6 +9,12 @@ struct ExplorerCommands: Commands {
     private var paneController: TabController? { windowModel?.activePane.controller }
 
     var body: some Commands {
+        CommandGroup(replacing: .appInfo) {
+            Button("About Explorerr") {
+                appModel?.activeSheet = .about
+            }
+        }
+
         CommandGroup(replacing: .newItem) {
             Group {
                 Button("New Window") {

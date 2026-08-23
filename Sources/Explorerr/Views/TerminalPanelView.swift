@@ -13,7 +13,7 @@ struct TerminalPanelView: View {
     var body: some View {
         VStack(spacing: 0) {
             header
-            TerminalHostView(controller: controller) { focused = $0 }
+            TerminalHostView(controller: controller, currentFolder: currentFolder) { focused = $0 }
         }
         .background(Color(nsColor: TerminalController.defaultBackground))
         .overlay(
@@ -28,7 +28,6 @@ struct TerminalPanelView: View {
             }
         }
     }
-
     // Terminal chrome is always dark (Windows Terminal on #0C0C0C), independent of the
     // app's Win11 light/dark palettes, so the header matches the emulator below it.
     private let termHeaderBG = Color(red: 0x1B/255, green: 0x1B/255, blue: 0x1B/255)
@@ -175,10 +174,12 @@ struct RoundedCornersShape: Shape {
 
 struct TerminalHostView: NSViewRepresentable {
     @ObservedObject var controller: TerminalController
+    let currentFolder: () -> URL?
     let onFocusChange: (Bool) -> Void
 
     final class TerminalTextView: NSTextView {
         weak var controller: TerminalController?
+        var currentFolderProvider: (() -> URL?)?
 
         override func keyDown(with event: NSEvent) {
             guard let controller else { super.keyDown(with: event); return }
@@ -193,24 +194,34 @@ struct TerminalHostView: NSViewRepresentable {
                 return
             }
 
-            // Terminal conventions: ⌘C copies when there's a selection, otherwise sends ^C
-            if mods.contains(.command), event.charactersIgnoringModifiers == "c" {
-                if selectedRange().length > 0 {
-                    copy(nil)
+            if mods.contains(.command) {
+                let key = event.charactersIgnoringModifiers?.lowercased()
+                if key == "c" {
+                    if selectedRange().length > 0 { copy(nil); return }
+                    controller.send(bytes: [0x03])
                     return
                 }
-                controller.send(bytes: [0x03])
-                return
-            }
-            if mods.contains(.command), event.charactersIgnoringModifiers == "v" {
-                if let text = NSPasteboard.general.string(forType: .string) {
-                    controller.paste(text)
+                if key == "v" {
+                    if let text = NSPasteboard.general.string(forType: .string) { controller.paste(text) }
+                    return
                 }
-                return
-            }
-            if mods.contains(.command) {
+                if key == "k" {
+                    controller.clear()
+                    return
+                }
+                if key == "+" || key == "=" {
+                    controller.zoomIn()
+                    return
+                }
+                if key == "-" {
+                    controller.zoomOut()
+                    return
+                }
+                if key == "0" {
+                    controller.resetZoom()
+                    return
+                }
                 // Not a terminal key: give the menu bar its shortcuts (⌘, ⌘T ⌘W …)
-                // instead of swallowing every command chord while the terminal is focused.
                 _ = NSApp.mainMenu?.performKeyEquivalent(with: event)
                 return
             }
@@ -234,11 +245,84 @@ struct TerminalHostView: NSViewRepresentable {
         override func insertNewline(_ sender: Any?) { controller?.send("\r") }
         override func insertTab(_ sender: Any?) { controller?.send("\t") }
         override func deleteBackward(_ sender: Any?) { controller?.send(bytes: [0x7F]) }
+
+        // MARK: Context menu
+
+        override func menu(for event: NSEvent) -> NSMenu? {
+            let menu = NSMenu(title: "Terminal")
+            let selLen = selectedRange().length
+            let copyItem = NSMenuItem(title: "Copy", action: #selector(copySelectedText(_:)), keyEquivalent: "")
+            copyItem.target = self
+            copyItem.isEnabled = selLen > 0
+            menu.addItem(copyItem)
+
+            let hasPasteText = NSPasteboard.general.string(forType: .string) != nil
+            let pasteItem = NSMenuItem(title: "Paste", action: #selector(pasteClipboardText(_:)), keyEquivalent: "")
+            pasteItem.target = self
+            pasteItem.isEnabled = hasPasteText
+            menu.addItem(pasteItem)
+
+            let selectAllItem = NSMenuItem(title: "Select All", action: #selector(selectAllText(_:)), keyEquivalent: "")
+            selectAllItem.target = self
+            menu.addItem(selectAllItem)
+
+            menu.addItem(NSMenuItem.separator())
+
+            let clearItem = NSMenuItem(title: "Clear Terminal", action: #selector(clearTerminalAction(_:)), keyEquivalent: "")
+            clearItem.target = self
+            menu.addItem(clearItem)
+
+            if let folder = currentFolderProvider?() {
+                let cdItem = NSMenuItem(title: "cd to Active Folder", action: #selector(cdToFolderAction(_:)), keyEquivalent: "")
+                cdItem.target = self
+                cdItem.representedObject = folder
+                menu.addItem(cdItem)
+            }
+
+            let restartItem = NSMenuItem(title: "Restart Shell", action: #selector(restartShellAction(_:)), keyEquivalent: "")
+            restartItem.target = self
+            menu.addItem(restartItem)
+
+            return menu
+        }
+
+        @objc private func copySelectedText(_ sender: Any?) { copy(nil) }
+        @objc private func pasteClipboardText(_ sender: Any?) {
+            if let text = NSPasteboard.general.string(forType: .string) { controller?.paste(text) }
+        }
+        @objc private func selectAllText(_ sender: Any?) { selectAll(nil) }
+        @objc private func clearTerminalAction(_ sender: Any?) { controller?.clear() }
+        @objc private func cdToFolderAction(_ sender: NSMenuItem) {
+            if let folder = sender.representedObject as? URL { controller?.cd(to: folder) }
+        }
+        @objc private func restartShellAction(_ sender: Any?) {
+            controller?.restart(cwd: currentFolderProvider?())
+        }
+
+        // MARK: Drag and drop files/folders → insert path
+
+        override func draggingEntered(_ sender: NSDraggingInfo) -> NSDragOperation {
+            if sender.draggingPasteboard.types?.contains(.fileURL) == true { return .copy }
+            return []
+        }
+
+        override func performDragOperation(_ sender: NSDraggingInfo) -> Bool {
+            guard let urls = sender.draggingPasteboard.readObjects(forClasses: [NSURL.self], options: nil) as? [URL],
+                  !urls.isEmpty else { return false }
+            let escaped = urls.map { url -> String in
+                let p = url.path.replacingOccurrences(of: "'", with: "'\\''")
+                return "'\(p)'"
+            }.joined(separator: " ")
+            controller?.send(escaped + " ")
+            return true
+        }
     }
 
     func makeNSView(context: Context) -> NSScrollView {
         let textView = TerminalTextView()
         textView.controller = controller
+        textView.currentFolderProvider = currentFolder
+        textView.registerForDraggedTypes([.fileURL])
         textView.isEditable = false
         textView.isSelectable = true
         textView.isRichText = false
@@ -263,6 +347,12 @@ struct TerminalHostView: NSViewRepresentable {
 
         context.coordinator.textView = textView
         context.coordinator.scroll = scroll
+
+        // Auto-focus on appear so typing works immediately without an extra mouse click
+        DispatchQueue.main.async {
+            textView.window?.makeFirstResponder(textView)
+        }
+
         return scroll
     }
 
@@ -346,6 +436,11 @@ enum TerminalKeyTranslator {
            let ascii = asciiScalar(chars.lowercased()),
            (ascii >= 0x61 && ascii <= 0x7A) || (ascii >= 0x30 && ascii <= 0x39) {
             return [0x1B, ascii]
+        }
+
+        // Shift-Tab (Backtab: keyCode 48 + shift → \e[Z)
+        if event.keyCode == 48, mods.contains(.shift) {
+            return escSeq("[Z")
         }
 
         switch event.keyCode {

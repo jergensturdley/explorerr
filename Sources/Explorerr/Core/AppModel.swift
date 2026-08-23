@@ -335,6 +335,21 @@ final class AppModel: ObservableObject {
         }
     }
 
+    /// Reset per-folder memory and restore all open tabs to default view mode and sort.
+    func resetAllTabsToDefaults() {
+        folderPrefs = [:]
+        for window in Self.windowRegistry.allObjects {
+            for pane in window.panes {
+                for tab in pane.controller.tabs {
+                    tab.viewMode = .details
+                    tab.sortKey = .name
+                    tab.sortAscending = true
+                    tab.reload()
+                }
+            }
+        }
+    }
+
     /// Reload any tab currently displaying one of these folders.
     func foldersChanged(_ urls: [URL]) {
         let paths = Set(urls.map { $0.standardizedFileURL.path })

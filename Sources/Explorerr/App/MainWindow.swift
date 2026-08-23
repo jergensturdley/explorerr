@@ -56,6 +56,9 @@ struct MainWindow: View {
                     if visible {
                         terminal.usesProfile = app.prefs.terminalUsesProfile
                         terminal.launchIfNeeded(cwd: windowModel.activeTab.currentFolderURL)
+                        if app.prefs.syncTerminalCD, let url = windowModel.activeTab.currentFolderURL {
+                            terminal.autoCD(to: url)
+                        }
                     }
                 }
                 .onChange(of: app.prefs.terminalUsesProfile) { uses in
@@ -823,6 +826,7 @@ struct PaneSplitter: View {
     @EnvironmentObject var theme: Theme
     @State private var hovering = false
     @State private var dragging = false
+    @State private var lastTranslation: CGFloat = 0
 
     var body: some View {
         let p = Win11.palette(theme.scheme)
@@ -834,9 +838,14 @@ struct PaneSplitter: View {
                 DragGesture(minimumDistance: 1)
                     .onChanged { value in
                         dragging = true
-                        onDrag(Double(value.translation.width))
+                        let delta = value.translation.width - lastTranslation
+                        lastTranslation = value.translation.width
+                        onDrag(Double(delta))
                     }
-                    .onEnded { _ in dragging = false }
+                    .onEnded { _ in
+                        dragging = false
+                        lastTranslation = 0
+                    }
             )
             .onHover { h in
                 hovering = h
@@ -887,19 +896,28 @@ struct NavResizeDivider: View {
     @EnvironmentObject var app: AppModel
     @EnvironmentObject var theme: Theme
     @State private var hovering = false
+    @State private var dragging = false
+    @State private var lastTranslation: CGFloat = 0
 
     var body: some View {
         let p = Win11.palette(theme.scheme)
         Rectangle()
-            .fill(hovering ? p.strokeStrong : p.divider)
-            .frame(width: hovering ? 3 : 1.5)
+            .fill(hovering || dragging ? p.strokeStrong : p.divider)
+            .frame(width: hovering || dragging ? 3 : 1.5)
             .frame(maxHeight: .infinity)
             .contentShape(Rectangle().inset(by: -3))
             .gesture(
                 DragGesture(minimumDistance: 1)
                     .onChanged { value in
-                        let proposed = app.navWidth + value.translation.width
+                        dragging = true
+                        let delta = value.translation.width - lastTranslation
+                        lastTranslation = value.translation.width
+                        let proposed = app.navWidth + delta
                         app.navWidth = min(Win11.Metrics.navPaneMaxWidth, max(Win11.Metrics.navPaneMinWidth, proposed))
+                    }
+                    .onEnded { _ in
+                        dragging = false
+                        lastTranslation = 0
                     }
             )
             .onHover { h in

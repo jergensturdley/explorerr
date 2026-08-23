@@ -140,7 +140,10 @@ struct SettingsView: View {
             Section {
                 HStack {
                     Spacer()
-                    Button("Clear per-folder view memory") { app.folderPrefs = [:] }
+                    Button("Clear per-folder view memory") {
+                        app.folderPrefs = [:]
+                        app.reloadAllTabs()
+                    }
                 }
                 HStack {
                     Spacer()
@@ -148,7 +151,7 @@ struct SettingsView: View {
                         var fresh = Prefs()
                         fresh.didPrimeFolderAccess = app.prefs.didPrimeFolderAccess
                         app.prefs = fresh
-                        app.reloadAllTabs()
+                        app.resetAllTabsToDefaults()
                     }
                 }
             }
