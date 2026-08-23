@@ -1,5 +1,35 @@
 # Changelog
 
+## 1.1.4 (2026-08-22)
+
+### The Shelf
+- New staging strip docked at the bottom of the window: park files there
+  while you browse, then place them in the active folder with "Copy here"
+  or "Move here" (move clears the Shelf, copy keeps it for re-placing).
+- Add via drag and drop, right-click "Add to Shelf", or Shift-Cmd-S. The
+  strip appears whenever it has content, and during a drag so an empty
+  Shelf can catch the drop. Chips drag back out as real files, double-click
+  reveals the file, missing files dim and get pruned. Shared across windows
+  and persisted across launches.
+
+### Rich Options (Cmd-,)
+- General: open new windows and new tabs to Home or the home folder;
+  Windows-style "single-click to open" mode (modifiers still select);
+  toggle for double-click-empty-space-goes-up; terminal follow; Full Disk
+  Access status and grant shortcut.
+- Appearance: theme System / Light / Dark (applies to the Win11 palettes
+  and native menus alike); compact rows for Details and List; status bar
+  and details pane toggles; sidebar section toggles (Gallery, cloud
+  storage, Network, Recycle Bin).
+- Files: existing file toggles plus privacy controls: disable recent-file
+  tracking entirely and clear the list.
+
+### Fixes
+- A cancelled drag no longer leaves internal drag state stale.
+- Restore Defaults keeps the one-time permission-prompt flag.
+
+Self-test: 60 checks.
+
 ## 1.1.3 (2026-08-22)
 
 - Fix: double-clicking an item navigated up a directory (entering a folder
