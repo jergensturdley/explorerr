@@ -4,6 +4,7 @@ struct CommandBar: View {
     @ObservedObject var tab: TabState
     @ObservedObject var app: AppModel
     @EnvironmentObject var theme: Theme
+    @State private var optionsOpener: (() -> Void)?
 
     private var selection: [FSItem] { tab.selectedItems }
     private var hasSelection: Bool { !selection.isEmpty }
@@ -11,95 +12,122 @@ struct CommandBar: View {
 
     var body: some View {
         let p = Win11.palette(theme.scheme)
-        HStack(spacing: 2) {
-            // New ▾
-            WinMenuButton(width: 224, enabled: inFolder, entries: newMenu) {
-                HStack(spacing: 5) {
-                    Image(systemName: "plus").font(.system(size: 11, weight: .semibold))
-                    Text("New")
-                    Image(systemName: "chevron.down").font(.system(size: 8, weight: .semibold))
+        GeometryReader { geo in
+            ScrollView(.horizontal) {
+                HStack(spacing: 2) {
+                    // New ▾
+                    WinMenuButton(width: 224, enabled: inFolder, entries: newMenu) {
+                        HStack(spacing: 5) {
+                            Image(systemName: "plus").font(.system(size: 11, weight: .semibold))
+                            Text("New")
+                            Image(systemName: "chevron.down").font(.system(size: 8, weight: .semibold))
+                        }
+                    }
+                    .buttonStyle(WinStandardButtonStyle(enabled: inFolder))
+                    .help("Create a new item")
+
+                    barDivider(p)
+
+                    commandIcon("scissors", help: "Cut (⌘X)") { app.cutItems(selection) }
+                        .disabled(!hasSelection)
+
+                    commandIcon("doc.on.doc", help: "Copy (⌘C)") { app.copyItems(selection) }
+                        .disabled(!hasSelection)
+
+                    Button {
+                        if let dest = tab.currentFolderURL {
+                            Task { await FileOps.paste(into: dest, app: app, tab: tab) }
+                        }
+                    } label: {
+                        Image(systemName: "doc.on.clipboard").font(.system(size: 14))
+                    }
+                    .buttonStyle(WinIconButtonStyle(enabled: inFolder))
+                    .disabled(!inFolder)
+                    .help("Paste (⌘V)")
+                    .accessibilityLabel("Paste")
+
+                    commandIcon("character.cursor.ibeam", help: "Rename (F2)") {
+                        if let first = selection.first { tab.renamingID = first.id }
+                    }
+                    .disabled(selection.count != 1)
+
+                    if hasSelection, !selection.filter({ !$0.isDirectory }).isEmpty {
+                        ShareLink(items: selection.filter { !$0.isDirectory }.map { $0.url }) {
+                            Image(systemName: "square.and.arrow.up").font(.system(size: 14))
+                        }
+                        .buttonStyle(WinIconButtonStyle())
+                        .help("Share")
+                        .accessibilityLabel("Share")
+                    } else {
+                        ShareLink(items: [tab.currentFolderURL ?? DirectoryLoader.homeURL]) {
+                            Image(systemName: "square.and.arrow.up").font(.system(size: 14))
+                        }
+                        .buttonStyle(WinIconButtonStyle())
+                        .help("Share")
+                        .accessibilityLabel("Share")
+                    }
+
+                    commandIcon("trash", help: "Delete (⌫)") {
+                        Task { await FileOps.deleteItems(selection, app: app) }
+                    }
+                    .disabled(!hasSelection)
+
+                    barDivider(p)
+
+                    WinMenuButton(width: 218, enabled: true, entries: sortMenu) {
+                        Image(systemName: "arrow.up.arrow.down").font(.system(size: 13.5))
+                    }
+                    .buttonStyle(WinIconButtonStyle())
+                    .help("Sort")
+                    .accessibilityLabel("Sort")
+
+                    WinMenuButton(width: 252, enabled: true, entries: viewMenu) {
+                        Image(systemName: "square.grid.2x2").font(.system(size: 13.5))
+                    }
+                    .buttonStyle(WinIconButtonStyle())
+                    .help("View")
+                    .accessibilityLabel("View")
+
+                    WinMenuButton(width: 216, enabled: true, entries: filterMenu) {
+                        Image(systemName: "line.3.horizontal.decrease").font(.system(size: 13.5))
+                    }
+                    .buttonStyle(WinIconButtonStyle())
+                    .help("Filter")
+                    .accessibilityLabel("Filter")
+
+                    barDivider(p)
+
+                    WinMenuButton(width: 240, enabled: true, entries: moreMenu) {
+                        Image(systemName: "ellipsis").font(.system(size: 14, weight: .medium))
+                    }
+                    .buttonStyle(WinIconButtonStyle())
+                    .help("See more options")
+                    .accessibilityLabel("See more options")
+
+                    Spacer(minLength: 0)
+
+                    commandIcon("gearshape", help: "Options (⌘,)") { openOptions() }
+                }
+                .frame(minWidth: geo.size.width, alignment: .leading)
+                .padding(.horizontal, 7)
+                .frame(height: Win11.Metrics.commandBarHeight)
+                .background {
+                    OptionsOpenerBridge { optionsOpener = $0 }
                 }
             }
-            .buttonStyle(WinStandardButtonStyle(enabled: inFolder))
-            .help("Create a new item")
-
-            barDivider(p)
-
-            commandIcon("scissors", help: "Cut (⌘X)") { app.cutItems(selection) }
-                .disabled(!hasSelection)
-
-            commandIcon("doc.on.doc", help: "Copy (⌘C)") { app.copyItems(selection) }
-                .disabled(!hasSelection)
-
-            Button {
-                if let dest = tab.currentFolderURL {
-                    Task { await FileOps.paste(into: dest, app: app, tab: tab) }
-                }
-            } label: {
-                Image(systemName: "doc.on.clipboard").font(.system(size: 14))
-            }
-            .buttonStyle(WinIconButtonStyle(enabled: inFolder))
-            .disabled(!inFolder)
-            .help("Paste (⌘V)")
-
-            commandIcon("character.cursor.ibeam", help: "Rename (F2)") {
-                if let first = selection.first { tab.renamingID = first.id }
-            }
-            .disabled(selection.count != 1)
-
-            if hasSelection, !selection.filter({ !$0.isDirectory }).isEmpty {
-                ShareLink(items: selection.filter { !$0.isDirectory }.map { $0.url }) {
-                    Image(systemName: "square.and.arrow.up").font(.system(size: 14))
-                }
-                .buttonStyle(WinIconButtonStyle())
-                .help("Share")
-            } else {
-                ShareLink(items: [tab.currentFolderURL ?? DirectoryLoader.homeURL]) {
-                    Image(systemName: "square.and.arrow.up").font(.system(size: 14))
-                }
-                .buttonStyle(WinIconButtonStyle())
-                .help("Share")
-            }
-
-            commandIcon("trash", help: "Delete (⌫)") {
-                Task { await FileOps.deleteItems(selection, app: app) }
-            }
-            .disabled(!hasSelection)
-
-            barDivider(p)
-
-            WinMenuButton(width: 218, enabled: true, entries: sortMenu) {
-                Image(systemName: "arrow.up.arrow.down").font(.system(size: 13.5))
-            }
-            .buttonStyle(WinIconButtonStyle())
-            .help("Sort")
-
-            WinMenuButton(width: 252, enabled: true, entries: viewMenu) {
-                Image(systemName: "square.grid.2x2").font(.system(size: 13.5))
-            }
-            .buttonStyle(WinIconButtonStyle())
-            .help("View")
-
-            WinMenuButton(width: 216, enabled: true, entries: filterMenu) {
-                Image(systemName: "line.3.horizontal.decrease").font(.system(size: 13.5))
-            }
-            .buttonStyle(WinIconButtonStyle())
-            .help("Filter")
-
-            barDivider(p)
-
-            WinMenuButton(width: 240, enabled: true, entries: moreMenu) {
-                Image(systemName: "ellipsis").font(.system(size: 14, weight: .medium))
-            }
-            .buttonStyle(WinIconButtonStyle())
-            .help("See more options")
-
-            Spacer(minLength: 0)
-
-            commandIcon("gearshape", help: "Options (⌘,)") { openSettings() }
         }
-        .padding(.horizontal, 7)
         .frame(height: Win11.Metrics.commandBarHeight)
+    }
+
+    /// Opens the SwiftUI Settings scene ("Options"). macOS 14+ goes through the native
+    /// `openSettings` action; macOS 13 falls back to the AppKit Preferences action.
+    private func openOptions() {
+        if let optionsOpener {
+            optionsOpener()
+        } else {
+            NSApp.sendAction(Selector(("showPreferencesWindow:")), to: nil, from: nil)
+            NSApp.sendAction(Selector(("showSettingsWindow:")), to: nil, from: nil)
+        }
     }
 
     // MARK: pieces
@@ -117,6 +145,7 @@ struct CommandBar: View {
         }
         .buttonStyle(WinIconButtonStyle())
         .help(help)
+        .accessibilityLabel(help)
     }
 
     private var newMenu: [WinMenuEntry] {
@@ -211,7 +240,7 @@ struct CommandBar: View {
                 if let target = propertiesTarget { app.activeSheet = .properties(target) }
             }),
             .row(.init(label: "Options", icon: "gearshape", shortcut: "⌘,") {
-                openSettings()
+                openOptions()
             }),
         ]
     }
@@ -220,9 +249,29 @@ struct CommandBar: View {
         if let first = selection.first { return first.url }
         return tab.currentFolderURL
     }
+}
 
-    private func openSettings() {
-        NSApp.sendAction(Selector(("showSettingsWindow:")), to: nil, from: nil)
-        NSApp.sendAction(Selector(("showPreferencesWindow:")), to: nil, from: nil)
+// MARK: - Options opener bridge
+
+/// Captures SwiftUI's native `openSettings` action (macOS 14+) so the command bar can
+/// invoke it from plain closures (the gear button and the "..." → Options row). On
+/// macOS 13 the bridge is inert and the call site falls back to the AppKit action.
+private struct OptionsOpenerBridge: View {
+    let onReady: (@escaping () -> Void) -> Void
+
+    var body: some View {
+        if #available(macOS 14.0, *) {
+            ModernOpenSettings(onReady: onReady)
+        }
+    }
+}
+
+@available(macOS 14.0, *)
+private struct ModernOpenSettings: View {
+    let onReady: (@escaping () -> Void) -> Void
+    @Environment(\.openSettings) private var openSettings
+
+    var body: some View {
+        Color.clear.onAppear { onReady({ openSettings() }) }
     }
 }

@@ -1,5 +1,36 @@
 # Changelog
 
+## 1.1.6 (2026-08-23)
+
+### Options / dropdown menus
+- Fixed the gear button so it actually opens the Settings scene. It previously
+  dispatched `NSApp` selectors that nothing in the responder chain could ever
+  resolve; it now uses the native SwiftUI `openSettings` action on macOS 14+,
+  with an AppKit fallback on macOS 13.
+- Fixed a layout bug that had every Win11 dropdown appearing shifted left by
+  half its width and up by half its height (`.position()` centers a view, but
+  the anchor's top-left corner was being passed). Menus now open directly
+  under their button and are clamped on-screen; submenus flip left near the
+  window edge.
+- The command bar now scrolls horizontally when a pane is too narrow (e.g.
+  three-pane layout), so the "…" and gear buttons can no longer be clipped
+  out of reach.
+- Restored the custom menu-bar menu by renaming it from "View" to "Layout".
+  The previous name collided with macOS's own View menu, which silently
+  dropped the app's items.
+
+### Terminal
+- The terminal header was redesigned as a proper Windows Terminal-style bar
+  (always dark): a live green/red status dot, the real shell name instead of a
+  hardcoded "zsh" badge, and a clearer restart button when the session exits.
+- Fixed a possible crash when a fast terminal restart raced the pty's teardown
+  (the process would abort on a "pty already started" precondition).
+
+### Fixes
+- Undoing a delete now restores items to their original folder instead of
+  dumping them in the home directory.
+- Added accessibility labels to the command-bar controls.
+
 ## 1.1.5 (2026-08-23)
 
 ### Terminal

@@ -199,7 +199,7 @@ struct ExplorerCommands: Commands {
             .keyboardShortcut(.delete, modifiers: .command)
         }
 
-        CommandMenu("View") {
+        CommandMenu("Layout") {
             Group {
                 Button("as Icons") { tab?.setViewMode(.iconsMedium) }
                     .keyboardShortcut("1", modifiers: .command)

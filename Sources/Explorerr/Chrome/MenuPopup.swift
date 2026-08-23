@@ -22,11 +22,17 @@ struct MenuHost: View {
                         .onTapGesture { coord.dismiss() }
                         .onTapGesture(count: 2) { coord.dismiss() }
 
-                    MenuPanelView(entries: req.entries, width: req.width, windowWidth: geo.size.width, onDismiss: { coord.dismiss() })
+                    // Top-left corner of the panel. `.position` places a view's CENTER,
+                    // so add half the (known) panel size. Clamp so it never spills off-screen.
+                    let panelHeight = MenuPanelView.height(for: req.entries)
+                    let left = min(max(6, req.anchor.minX), max(6, geo.size.width - req.width - 6))
+                    let top = max(6, min(req.anchor.maxY + 4, geo.size.height - panelHeight - 6))
+
+                    MenuPanelView(entries: req.entries, width: req.width, originX: left, windowWidth: geo.size.width, onDismiss: { coord.dismiss() })
                         .id(req.id)
                         .position(
-                            x: min(max(6, req.anchor.minX), max(6, geo.size.width - req.width - 6)),
-                            y: min(req.anchor.maxY + 4, geo.size.height - 20)
+                            x: left + req.width / 2,
+                            y: top + panelHeight / 2
                         )
                         .transition(.opacity)
                 }
@@ -41,6 +47,8 @@ struct MenuHost: View {
 struct MenuPanelView: View {
     let entries: [WinMenuEntry]
     let width: CGFloat
+    /// Window-space left edge of this panel (needed so nested submenus can flip).
+    var originX: CGFloat = 0
     var windowWidth: CGFloat
     let onDismiss: () -> Void
 
@@ -52,6 +60,23 @@ struct MenuPanelView: View {
         let id: UUID
         let entries: [WinMenuEntry]
         let flip: Bool
+        let originX: CGFloat
+    }
+
+    private static let childWidth: CGFloat = 216
+
+    /// Deterministic rendered height of a panel (rows are fixed-height, single-line).
+    /// Used by `MenuHost` to position the panel's top-left corner without an async measure.
+    static func height(for entries: [WinMenuEntry]) -> CGFloat {
+        var h: CGFloat = 10 // .padding(.vertical, 5) × 2
+        for e in entries {
+            switch e.kind {
+            case .separator: h += 11 // 1px rule + 5pt vertical padding × 2
+            case .header: h += 24
+            case .row: h += 30
+            }
+        }
+        return h
     }
 
     var body: some View {
@@ -75,7 +100,7 @@ struct MenuPanelView: View {
                     MenuRowView(row: row, width: width) {
                         if let children = row.children {
                             hoverTask?.cancel()
-                            openChild = ChildPanel(id: entry.id, entries: children, flip: false)
+                            openChild = Self.makeChild(entry: entry, children: children, width: width, originX: originX, windowWidth: windowWidth)
                         } else {
                             onDismiss()
                             row.action?()
@@ -88,7 +113,7 @@ struct MenuPanelView: View {
                                 hoverTask = Task {
                                     try? await Task.sleep(nanoseconds: 130_000_000)
                                     guard !Task.isCancelled else { return }
-                                    openChild = ChildPanel(id: entry.id, entries: row.children ?? [], flip: false)
+                                    openChild = Self.makeChild(entry: entry, children: row.children ?? [], width: width, originX: originX, windowWidth: windowWidth)
                                 }
                             } else {
                                 openChild = nil
@@ -97,9 +122,9 @@ struct MenuPanelView: View {
                     }
                     .overlay(alignment: .topLeading) {
                         if let child = openChild, child.id == entry.id {
-                            MenuPanelView(entries: child.entries, width: 216, windowWidth: windowWidth, onDismiss: onDismiss)
+                            MenuPanelView(entries: child.entries, width: Self.childWidth, originX: child.originX, windowWidth: windowWidth, onDismiss: onDismiss)
                                 .fixedSize()
-                                .offset(x: child.flip ? -width - 4 : width + 4, y: -5)
+                                .offset(x: child.flip ? -(Self.childWidth + 4) : width + 4, y: -5)
                                 .zIndex(10)
                         }
                     }
@@ -117,6 +142,15 @@ struct MenuPanelView: View {
         .shadow(color: .black.opacity(theme.scheme == .dark ? 0.45 : 0.16), radius: 16, x: 0, y: 9)
         .fixedSize()
         .onDisappear { hoverTask?.cancel() }
+    }
+
+    /// Builds a child submenu, flipping it left when it would run off the window's
+    /// right edge (the parent panel's window-space origin and widths are known here).
+    private static func makeChild(entry: WinMenuEntry, children: [WinMenuEntry], width: CGFloat, originX: CGFloat, windowWidth: CGFloat) -> ChildPanel {
+        let fitsRight = originX + width + 4 + childWidth <= windowWidth - 6
+        let flip = !fitsRight
+        let childOriginX = flip ? originX - childWidth - 4 : originX + width + 4
+        return ChildPanel(id: entry.id, entries: children, flip: flip, originX: childOriginX)
     }
 }
 

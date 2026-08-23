@@ -277,7 +277,13 @@ enum FileOps {
                     src = trash.appendingPathComponent(found, isDirectory: u.hasDirectoryPath)
                 } else { continue }
             }
-            var dst = dest.appendingPathComponent(u.lastPathComponent, isDirectory: u.hasDirectoryPath)
+            // Restore to the recorded original folder when known (so undoing a
+            // delete puts the item back where it came from, not in ~).
+            var destDir = dest
+            if let recorded = app.trashOrigins[u.lastPathComponent], !recorded.isEmpty {
+                destDir = URL(fileURLWithPath: recorded).deletingLastPathComponent()
+            }
+            var dst = destDir.appendingPathComponent(u.lastPathComponent, isDirectory: u.hasDirectoryPath)
             if fm.fileExists(atPath: dst.path) { dst = uniqueURL(for: dst) }
             if (try? fm.moveItem(at: src, to: dst)) != nil { restored += 1 }
         }

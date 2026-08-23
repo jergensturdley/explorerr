@@ -21,6 +21,9 @@ final class PtyProcess {
         return envShell.isEmpty ? "/bin/zsh" : envShell
     }()
 
+    /// Short shell name (e.g. "zsh", "bash") shown in the terminal header.
+    static var shellName: String { (defaultShell as NSString).lastPathComponent }
+
     var isRunning: Bool { masterFD >= 0 }
 
     // MARK: spawn
@@ -63,7 +66,9 @@ final class PtyProcess {
     }
 
     func start(cwd: URL?, cols: Int, rows: Int, usesProfile: Bool = false) {
-        precondition(masterFD < 0, "pty already started")
+        // A rapid restart can race the read source's cancel handler (which is what closes
+        // masterFD). Bail gracefully instead of crashing; the next launch attempt succeeds.
+        guard masterFD < 0 else { return }
         let shell = Self.defaultShell
         let shellName = (shell as NSString).lastPathComponent
 

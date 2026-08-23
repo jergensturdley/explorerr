@@ -29,24 +29,38 @@ struct TerminalPanelView: View {
         }
     }
 
+    // Terminal chrome is always dark (Windows Terminal on #0C0C0C), independent of the
+    // app's Win11 light/dark palettes, so the header matches the emulator below it.
+    private let termHeaderBG = Color(red: 0x1B/255, green: 0x1B/255, blue: 0x1B/255)
+    private let termHeaderFG = Color(red: 0xCC/255, green: 0xCC/255, blue: 0xCC/255)
+    private let termHeaderCyan = Color(red: 0x61/255, green: 0xD6/255, blue: 0xD6/255)
+    private let termHeaderGreen = Color(red: 0x16/255, green: 0xC6/255, blue: 0x0C/255)
+    private let termHeaderRed = Color(red: 0xC5/255, green: 0x0F/255, blue: 0x1F/255)
+    private let termHeaderYellow = Color(red: 0xF9/255, green: 0xF1/255, blue: 0xA5/255)
+
     private var header: some View {
-        let p = Win11.palette(theme.scheme)
-        return HStack(spacing: 8) {
+        HStack(spacing: 8) {
+            Circle()
+                .fill(controller.exited ? termHeaderRed : termHeaderGreen)
+                .frame(width: 7, height: 7)
+                .help(controller.exited ? "Shell exited" : "Shell running")
+
             Image(systemName: "terminal")
-                .font(.system(size: 12, weight: .medium))
-                .foregroundStyle(p.accentText)
+                .font(.system(size: 11.5, weight: .medium))
+                .foregroundStyle(termHeaderCyan)
+
             Text(controller.title == "Terminal" ? "Terminal" : controller.title)
                 .font(.system(size: 12, weight: .semibold))
-                .foregroundStyle(p.textPrimary)
+                .foregroundStyle(termHeaderFG)
                 .lineLimit(1)
                 .truncationMode(.middle)
 
-            Text("zsh")
-                .font(.system(size: 10.5, weight: .medium))
-                .foregroundStyle(p.accentText)
+            Text(PtyProcess.shellName)
+                .font(.system(size: 10.5, weight: .semibold))
+                .foregroundStyle(termHeaderCyan)
                 .padding(.horizontal, 7)
                 .padding(.vertical, 2)
-                .background(Capsule().fill(p.selectionBG))
+                .background(Capsule().fill(Color.white.opacity(0.08)))
 
             Spacer(minLength: 8)
 
@@ -66,38 +80,67 @@ struct TerminalPanelView: View {
             }
         }
         .padding(.horizontal, 12)
-        .frame(height: 34)
-        .background(p.menuBG)
-        .overlay(alignment: .bottom) { Rectangle().fill(p.divider).frame(height: 1) }
+        .frame(height: 36)
+        .background(termHeaderBG)
+        .overlay(alignment: .bottom) { Rectangle().fill(Color.white.opacity(0.07)).frame(height: 1) }
     }
 
     private func headerButton(_ symbol: String, help: String, action: @escaping () -> Void) -> some View {
-        Button(action: action) {
-            Image(systemName: symbol).font(.system(size: 11.5, weight: .medium))
-        }
-        .buttonStyle(WinIconButtonStyle(padding: 5))
-        .help(help)
+        TerminalHeaderButton(symbol: symbol, help: help, action: action)
     }
 
     private var exitedBar: some View {
-        let p = Win11.palette(theme.scheme)
-        return HStack(spacing: 10) {
+        HStack(spacing: 10) {
             Image(systemName: "exclamationmark.triangle")
                 .font(.system(size: 11))
-                .foregroundStyle(p.caution)
+                .foregroundStyle(termHeaderYellow)
             Text("The shell exited.")
                 .font(.system(size: 12))
-                .foregroundStyle(p.textSecondary)
+                .foregroundStyle(termHeaderFG)
             Spacer()
-            Button("Restart") {
+            Button {
                 controller.restart(cwd: currentFolder())
+            } label: {
+                Text("Restart")
+                    .font(.system(size: 12, weight: .semibold))
+                    .foregroundStyle(Color.white)
+                    .padding(.horizontal, 14)
+                    .frame(height: 24)
+                    .background(Capsule().fill(Color.white.opacity(0.10)))
+                    .contentShape(Capsule())
             }
-            .buttonStyle(WinStandardButtonStyle())
+            .buttonStyle(.plain)
+            .help("Restart the shell")
         }
         .padding(.horizontal, 12)
         .frame(height: 38)
-        .background(p.menuBG)
-        .overlay(alignment: .top) { Rectangle().fill(p.divider).frame(height: 1) }
+        .background(termHeaderBG)
+        .overlay(alignment: .top) { Rectangle().fill(Color.white.opacity(0.07)).frame(height: 1) }
+    }
+}
+
+/// Icon button for the terminal header's always-dark chrome.
+private struct TerminalHeaderButton: View {
+    let symbol: String
+    let help: String
+    let action: () -> Void
+    @State private var hovering = false
+
+    var body: some View {
+        Button(action: action) {
+            Image(systemName: symbol)
+                .font(.system(size: 12, weight: .medium))
+                .foregroundStyle(hovering ? Color.white : Color(red: 0.85, green: 0.85, blue: 0.86))
+                .frame(width: 25, height: 25)
+                .background(
+                    RoundedRectangle(cornerRadius: 5, style: .continuous)
+                        .fill(hovering ? Color.white.opacity(0.10) : Color.clear)
+                )
+                .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .onHover { hovering = $0 }
+        .help(help)
     }
 }
 
