@@ -1,5 +1,14 @@
 # Changelog
 
+## 1.1.8 (2026-08-23)
+
+### Header & Command Bar Layout
+- Fixed the cramped titlebar in single-pane mode: removed the blank sidebar spacer
+  from the titlebar so the tab strip spans the entire header across to the caption buttons.
+- Removed the unsightly horizontal scrollbar indicator that ran across the command bar.
+- Fixed command bar item spacing and margins, anchoring the gear Options button cleanly
+  on the trailing edge with proper breathing room.
+
 ## 1.1.7 (2026-08-23)
 
 ### Options & UI Fixes

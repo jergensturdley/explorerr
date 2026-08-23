@@ -12,9 +12,9 @@ struct CommandBar: View {
 
     var body: some View {
         let p = Win11.palette(theme.scheme)
-        GeometryReader { geo in
-            ScrollView(.horizontal) {
-                HStack(spacing: 2) {
+        HStack(spacing: 0) {
+            ScrollView(.horizontal, showsIndicators: false) {
+                HStack(spacing: 3) {
                     // New ▾
                     WinMenuButton(width: 224, enabled: inFolder, entries: newMenu) {
                         HStack(spacing: 5) {
@@ -103,20 +103,20 @@ struct CommandBar: View {
                     .buttonStyle(WinIconButtonStyle())
                     .help("See more options")
                     .accessibilityLabel("See more options")
-
-                    Spacer(minLength: 0)
-
-                    commandIcon("gearshape", help: "Options (⌘,)") { openOptions() }
                 }
-                .frame(minWidth: geo.size.width, alignment: .leading)
-                .padding(.horizontal, 7)
+                .padding(.horizontal, 10)
                 .frame(height: Win11.Metrics.commandBarHeight)
-                .background {
-                    OptionsOpenerBridge { optionsOpener = $0 }
-                }
             }
+
+            Spacer(minLength: 4)
+
+            commandIcon("gearshape", help: "Options (⌘,)") { openOptions() }
+                .padding(.trailing, 10)
         }
         .frame(height: Win11.Metrics.commandBarHeight)
+        .background {
+            OptionsOpenerBridge { optionsOpener = $0 }
+        }
     }
 
     /// Opens the SwiftUI Settings scene ("Options"). macOS 14+ goes through the native

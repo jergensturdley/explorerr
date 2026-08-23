@@ -109,23 +109,26 @@ struct MainWindow: View {
                 VStack(spacing: 0) {
                     // Titlebar strip: one tab strip per pane + window controls
                     HStack(spacing: 0) {
-                        // Match the content row's leading NavigationPane so tab strips align with their panes.
-                        Color.clear
-                            .frame(width: app.navWidth)
-                            .overlay(alignment: .trailing) {
-                                Rectangle().fill(themeDivider).frame(width: 1).padding(.vertical, 7)
-                            }
+                        if windowModel.panes.count > 1 {
+                            // In multi-pane mode, match the content row's leading NavigationPane so tab strips align with their panes.
+                            Color.clear
+                                .frame(width: app.navWidth)
+                                .overlay(alignment: .trailing) {
+                                    Rectangle().fill(themeDivider).frame(width: 1).padding(.vertical, 7)
+                                }
+                        }
 
                         ForEach(Array(windowModel.panes.enumerated()), id: \.element.id) { idx, pane in
                             let isLast = idx == windowModel.panes.count - 1
+                            let stripWidth: CGFloat = windowModel.panes.count == 1
+                                ? max(60, geo.size.width - windowControlsReserve - 8)
+                                : (isLast ? max(60, sizes.paneWidths[idx] - windowControlsReserve) : sizes.paneWidths[idx])
                             PaneTabStrip(
                                 controller: pane.controller,
                                 isPaneActive: pane.id == windowModel.activePaneID,
                                 isLastPane: isLast
                             )
-                            // The last strip gives up room for the caption buttons so the
-                            // whole row fits the window instead of overflowing off-screen.
-                            .frame(width: isLast ? max(60, sizes.paneWidths[idx] - windowControlsReserve) : sizes.paneWidths[idx])
+                            .frame(width: stripWidth)
                             .background(
                                 GeometryReader { g in
                                     Color.clear.preference(key: StripFrameKey.self, value: [pane.id: g.frame(in: .named("win"))])
