@@ -445,12 +445,23 @@ final class TerminalEmulator {
         if newRows > rows {
             lines.append(contentsOf: Array(repeating: Array(repeating: TermCell.blank, count: newCols), count: newRows - rows))
         } else if newRows < rows {
-            let removed = lines.count - newRows
-            if savedScreen == nil {
-                scrollback.append(contentsOf: lines.prefix(removed))
-                if scrollback.count > scrollbackLimit { scrollback.removeFirst(scrollback.count - scrollbackLimit) }
+            // Trim BLANK rows below the cursor first: pushing the top rows out during
+            // the window's layout-settling resizes shoved the prompt into scrollback
+            // and left an all-blank screen (terminal looked empty until output filled it).
+            var toRemove = lines.count - newRows
+            while toRemove > 0, lines.count > cursorRow + 1,
+                  lines.last?.allSatisfy({ $0.ch == " " }) == true {
+                lines.removeLast()
+                toRemove -= 1
             }
-            lines.removeFirst(removed)
+            if toRemove > 0 {
+                if savedScreen == nil {
+                    scrollback.append(contentsOf: lines.prefix(toRemove))
+                    if scrollback.count > scrollbackLimit { scrollback.removeFirst(scrollback.count - scrollbackLimit) }
+                }
+                lines.removeFirst(toRemove)
+                cursorRow = max(0, cursorRow - toRemove)
+            }
         }
 
         cols = newCols

@@ -1,5 +1,27 @@
 # Changelog
 
+## 1.1.5 (2026-08-23)
+
+### Terminal
+- The integrated terminal now uses a clean minimal prompt by default instead
+  of loading your shell profile, so fastfetch, powerlevel10k and similar
+  startup output no longer mangle the built-in emulator. Homebrew paths stay
+  on PATH, and TERM_PROGRAM is set to Explorerr. Turn on "Load my shell
+  profile and startup files" in Options to get your own zshrc back.
+- Fixed a bug present since 1.0: the shell prompt was often invisible. The
+  emulator pushed the top rows (with the prompt) into scrollback during the
+  window's layout-settling resizes, leaving a blank screen pinned into view.
+  Blank rows are now trimmed first.
+- The terminal no longer swallows every Cmd shortcut while focused: Cmd-,
+  Cmd-T, Cmd-W and the rest reach the menu bar again (Cmd-C/Cmd-V keep
+  their terminal behavior).
+
+### Options
+- A gear button on the command bar opens Options directly, in addition to
+  Cmd-, and the "..." menu.
+
+Self-test: 67 checks, including a real pty spawn-and-echo test.
+
 ## 1.1.4 (2026-08-22)
 
 ### The Shelf

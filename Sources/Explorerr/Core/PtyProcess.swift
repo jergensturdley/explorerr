@@ -25,31 +25,71 @@ final class PtyProcess {
 
     // MARK: spawn
 
-    func start(cwd: URL?, cols: Int, rows: Int) {
-        precondition(masterFD < 0, "pty already started")
-        let shell = Self.defaultShell
-
-        // Prepare everything that needs Swift/allocations BEFORE fork.
+    /// Environment for the child shell. With `usesProfile` false (default) the shell is
+    /// non-login and, for zsh, ZDOTDIR points at a minimal rc: the user's fastfetch /
+    /// fancy-prompt startup files stay out of the small built-in emulator. PATH gets the
+    /// Homebrew locations a login shell would have added via path_helper.
+    static func shellEnvironment(usesProfile: Bool, shellName: String, zdotDir: String?) -> [String: String] {
         var env = ProcessInfo.processInfo.environment
         env["TERM"] = "xterm-256color"
         env["COLORTERM"] = "truecolor"
+        env["TERM_PROGRAM"] = "Explorerr"
         env["XPC_SERVICE_NAME"] = nil   // don't inherit XPC bootstrap hazards
-        let envEntries = env.map { "\($0.key)=\($0.value)" }
+        if !usesProfile {
+            if shellName == "zsh", let zdotDir { env["ZDOTDIR"] = zdotDir }
+            var path = env["PATH"] ?? "/usr/bin:/bin:/usr/sbin:/sbin"
+            let parts = path.split(separator: ":").map(String.init)
+            for extra in ["/opt/homebrew/bin", "/usr/local/bin"] where !parts.contains(extra) {
+                path += ":" + extra
+            }
+            env["PATH"] = path
+        }
+        return env
+    }
+
+    /// Directory holding the minimal .zshrc used when the user's profile is skipped.
+    private static func cleanZDotDir() -> URL {
+        let dir = FileManager.default.temporaryDirectory.appendingPathComponent("explorerr-zdot", isDirectory: true)
+        try? FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+        let rc = """
+        # Explorerr integrated terminal (clean profile).
+        # Turn on "Load my shell profile" in Explorerr's Options to use your own zshrc.
+        autoload -Uz colors && colors
+        PS1='%F{cyan}%1~%f %# '
+        export CLICOLOR=1
+        """
+        try? rc.write(to: dir.appendingPathComponent(".zshrc"), atomically: true, encoding: .utf8)
+        return dir
+    }
+
+    func start(cwd: URL?, cols: Int, rows: Int, usesProfile: Bool = false) {
+        precondition(masterFD < 0, "pty already started")
+        let shell = Self.defaultShell
         let shellName = (shell as NSString).lastPathComponent
+
+        // Prepare everything that needs Swift/allocations BEFORE fork.
+        let zdot = usesProfile ? nil : Self.cleanZDotDir().path
+        let env = Self.shellEnvironment(usesProfile: usesProfile, shellName: shellName, zdotDir: zdot)
+        let envEntries = env.map { "\($0.key)=\($0.value)" }
+
+        // Login shell ("-zsh") loads the user's startup files; otherwise plain + no rc.
+        var argStrings = [usesProfile ? "-\(shellName)" : shellName]
+        if !usesProfile, shellName == "bash" { argStrings += ["--noprofile", "--norc"] }
 
         let cwdPath = cwd?.path ?? NSHomeDirectory()
         let shellCString = strdup(shell)!
         let cwdCString = strdup(cwdPath)!
-        let arg0CString = strdup("-\(shellName)")!   // login shell → loads user rc
-        var argv: [UnsafeMutablePointer<CChar>?] = [arg0CString, nil]
+        var argv: [UnsafeMutablePointer<CChar>?] = argStrings.map { strdup($0)! }
+        argv.append(nil)
         var envp: [UnsafeMutablePointer<CChar>?] = envEntries.map { strdup($0)! }
         envp.append(nil)
 
         let master = posix_openpt(Int32(O_RDWR | O_NOCTTY))
         guard master >= 0, grantpt(master) == 0, unlockpt(master) == 0,
               let slaveNameC = ptsname(master) else {
-            free(shellCString); free(cwdCString); free(arg0CString)
-            envp.forEach { free($0) }
+            free(shellCString); free(cwdCString)
+            argv.forEach { if let p = $0 { free(p) } }
+            envp.forEach { if let p = $0 { free(p) } }
             return
         }
         let slaveName = String(cString: slaveNameC)
@@ -74,7 +114,8 @@ final class PtyProcess {
 
         // ---- parent ----
         free(slaveNameCString)
-        free(shellCString); free(cwdCString); free(arg0CString)
+        free(shellCString); free(cwdCString)
+        argv.forEach { if let p = $0 { free(p) } }
         envp.forEach { if let p = $0 { free(p) } }
 
         guard childPid > 0 else { return }

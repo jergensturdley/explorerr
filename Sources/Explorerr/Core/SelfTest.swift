@@ -148,6 +148,13 @@ enum SelfTest {
             alt.feed("keep")
             alt.feed("\u{1B}[?1049hcleared\u{1B}[?1049l")
             expect(alt.text(inRow: 0).hasPrefix("keep"), "alt-screen restores primary buffer")
+
+            // Shrinking must not shove the prompt into scrollback (blank rows go first)
+            let shrink = TerminalEmulator(cols: 20, rows: 10)
+            shrink.feed("hello")
+            shrink.resize(cols: 20, rows: 5)
+            expect(shrink.text(inRow: 0).hasPrefix("hello"), "shrink keeps content on screen")
+            expect(shrink.scrollback.isEmpty, "shrink trims blank rows before using scrollback")
         }
 
         // Formatters
@@ -238,6 +245,41 @@ enum SelfTest {
             expect(BandSelect.isEmptySpace(point: CGPoint(x: 50, y: 300), clip: clip, origin: .zero, frames: grid), "below the last item is empty space")
             expect(!BandSelect.isEmptySpace(point: CGPoint(x: 50, y: 600), clip: clip, origin: .zero, frames: grid), "outside the clip is not empty space")
             expect(BandSelect.isEmptySpace(point: CGPoint(x: 50, y: 100), clip: clip, origin: .zero, frames: [:]), "empty folder: anywhere in the clip counts")
+        }
+
+        // PTY end-to-end: a clean-profile shell must emit a prompt and echo commands
+        do {
+            let pty = PtyProcess()
+            var got = Data()
+            let lock = NSLock()
+            let sem = DispatchSemaphore(value: 0)
+            pty.onOutput = { d in
+                lock.lock(); got.append(d); let n = got.count; lock.unlock()
+                if n >= 4 { sem.signal() }
+            }
+            pty.start(cwd: nil, cols: 60, rows: 12, usesProfile: false)
+            _ = sem.wait(timeout: .now() + 4)
+            pty.write(Data("echo SELFTEST-$((6*7))\n".utf8))
+            let echoDeadline = Date().addingTimeInterval(4)
+            var sawEcho = false
+            while Date() < echoDeadline {
+                lock.lock(); let text = String(data: got, encoding: .utf8) ?? ""; lock.unlock()
+                if text.contains("SELFTEST-42") { sawEcho = true; break }
+                usleep(100_000)
+            }
+            pty.terminate()
+            lock.lock(); let promptBytes = got.count; lock.unlock()
+            expect(promptBytes > 0, "pty shell emits output")
+            expect(sawEcho, "pty shell executes a command (clean profile)")
+        }
+
+        // Terminal environment (clean profile vs user profile)
+        do {
+            let clean = PtyProcess.shellEnvironment(usesProfile: false, shellName: "zsh", zdotDir: "/tmp/zdot")
+            expect(clean["ZDOTDIR"] == "/tmp/zdot" && clean["TERM_PROGRAM"] == "Explorerr", "clean shell env redirects ZDOTDIR")
+            expect(clean["PATH"]?.contains("/opt/homebrew/bin") == true, "clean shell env includes Homebrew PATH")
+            let full = PtyProcess.shellEnvironment(usesProfile: true, shellName: "zsh", zdotDir: "/tmp/zdot")
+            expect(full["ZDOTDIR"] == ProcessInfo.processInfo.environment["ZDOTDIR"], "profile shell env leaves ZDOTDIR alone")
         }
 
         // Shelf: dedupe, order, remove (restore the user's persisted shelf afterwards —

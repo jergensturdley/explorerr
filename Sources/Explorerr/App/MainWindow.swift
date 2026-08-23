@@ -47,14 +47,19 @@ struct MainWindow: View {
                 .onAppear {
                     applyAppearance()
                     installMonitors()
+                    terminal.usesProfile = app.prefs.terminalUsesProfile
                     if windowModel.terminalVisible {
                         terminal.launchIfNeeded(cwd: windowModel.activeTab.currentFolderURL)
                     }
                 }
                 .onChange(of: windowModel.terminalVisible) { visible in
                     if visible {
+                        terminal.usesProfile = app.prefs.terminalUsesProfile
                         terminal.launchIfNeeded(cwd: windowModel.activeTab.currentFolderURL)
                     }
+                }
+                .onChange(of: app.prefs.terminalUsesProfile) { uses in
+                    terminal.usesProfile = uses   // applies on the next shell (re)start
                 }
                 .onDisappear {
                     removeMonitors()

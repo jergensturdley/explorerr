@@ -95,6 +95,8 @@ struct CommandBar: View {
             .help("See more options")
 
             Spacer(minLength: 0)
+
+            commandIcon("gearshape", help: "Options (⌘,)") { openSettings() }
         }
         .padding(.horizontal, 7)
         .frame(height: Win11.Metrics.commandBarHeight)

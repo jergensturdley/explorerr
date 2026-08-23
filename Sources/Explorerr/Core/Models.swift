@@ -153,6 +153,8 @@ struct Prefs: Codable {
     var showDetailsPane: Bool = false
     /// Dolphin-style: navigating the view cd's the integrated terminal when the shell is idle.
     var syncTerminalCD: Bool = true
+    /// Integrated terminal loads the user's shell startup files (off: clean minimal prompt).
+    var terminalUsesProfile: Bool = false
     /// One-time: the Desktop/Documents/Downloads permission prompts were triggered at launch.
     var didPrimeFolderAccess: Bool = false
     /// Appearance override (Win11 theme is drawn from our palettes, so this is app-wide).
@@ -187,6 +189,7 @@ struct Prefs: Codable {
         statusVisible = try c.decodeIfPresent(Bool.self, forKey: .statusVisible) ?? true
         showDetailsPane = try c.decodeIfPresent(Bool.self, forKey: .showDetailsPane) ?? false
         syncTerminalCD = try c.decodeIfPresent(Bool.self, forKey: .syncTerminalCD) ?? true
+        terminalUsesProfile = try c.decodeIfPresent(Bool.self, forKey: .terminalUsesProfile) ?? false
         didPrimeFolderAccess = try c.decodeIfPresent(Bool.self, forKey: .didPrimeFolderAccess) ?? false
         appearance = try c.decodeIfPresent(AppearanceMode.self, forKey: .appearance) ?? .system
         compactRows = try c.decodeIfPresent(Bool.self, forKey: .compactRows) ?? false

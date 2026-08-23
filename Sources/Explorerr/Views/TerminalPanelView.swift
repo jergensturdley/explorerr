@@ -166,7 +166,10 @@ struct TerminalHostView: NSViewRepresentable {
                 return
             }
             if mods.contains(.command) {
-                return // don't type command-modified characters into the shell
+                // Not a terminal key: give the menu bar its shortcuts (⌘, ⌘T ⌘W …)
+                // instead of swallowing every command chord while the terminal is focused.
+                _ = NSApp.mainMenu?.performKeyEquivalent(with: event)
+                return
             }
 
             if let bytes = TerminalKeyTranslator.bytes(for: event) {

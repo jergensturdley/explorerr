@@ -55,6 +55,11 @@ struct SettingsView: View {
 
             Section("Terminal") {
                 Toggle("Terminal follows navigation (cd when idle)", isOn: pref(\.syncTerminalCD))
+                Toggle("Load my shell profile and startup files", isOn: pref(\.terminalUsesProfile))
+                Text("Off gives a clean minimal prompt. Fastfetch, powerlevel10k and similar startup output can render poorly in the built-in terminal. Applies when the shell restarts (use the restart button in the terminal header).")
+                    .font(.system(size: 11.5))
+                    .foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
             }
 
             Section("File access") {

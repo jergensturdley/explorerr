@@ -21,6 +21,9 @@ final class TerminalController: ObservableObject {
     private var lastCols = 80
     private var lastRows = 24
     private var launched = false
+    /// Load the user's shell startup files (Options; off by default so fastfetch and
+    /// heavyweight prompts don't mangle the minimal emulator). Applies at (re)launch.
+    var usesProfile = false
 
     var isRunning: Bool { pty.isRunning }
 
@@ -45,7 +48,7 @@ final class TerminalController: ObservableObject {
                 self.bump()
             }
         }
-        pty.start(cwd: cwd, cols: lastCols, rows: lastRows)
+        pty.start(cwd: cwd, cols: lastCols, rows: lastRows, usesProfile: usesProfile)
     }
 
     func restart(cwd: URL?) {
