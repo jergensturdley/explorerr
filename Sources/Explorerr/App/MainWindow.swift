@@ -72,31 +72,44 @@ struct MainWindow: View {
                 .onChange(of: systemScheme) { _ in applyAppearance() }
                 .onChange(of: app.prefs.appearance) { _ in applyAppearance() }
                 .onReceive(NotificationCenter.default.publisher(for: .explorerrOpenInNewTab)) { note in
+                    guard isKeyWindow() else { return }
                     if let loc = note.object as? Location {
                         windowModel.activePane.controller.addTab(loc)
                     }
                 }
                 .onReceive(NotificationCenter.default.publisher(for: .explorerrToggleDualPane)) { _ in
+                    guard isKeyWindow() else { return }
                     windowModel.toggleDualPane()
                 }
                 .onReceive(NotificationCenter.default.publisher(for: .explorerrZoomWindow)) { _ in
+                    guard isKeyWindow() else { return }
                     chrome.toggleZoom()
                 }
                 .onReceive(NotificationCenter.default.publisher(for: .explorerrToggleTerminalPane)) { _ in
+                    guard isKeyWindow() else { return }
                     windowModel.terminalVisible.toggle()
                 }
                 .onReceive(NotificationCenter.default.publisher(for: .explorerrNavigated)) { note in
-                    if let sender = note.object as? TabState {
-                        windowModel.mirrorNavigation(sender: sender, location: sender.location)
-                        // Dolphin: keep the integrated terminal's cwd in step with navigation
-                        if app.prefs.syncTerminalCD, windowModel.terminalVisible,
-                           sender === windowModel.activeTab, let url = sender.currentFolderURL {
-                            terminal.autoCD(to: url)
-                        }
+                    guard isKeyWindow(), let sender = note.object as? TabState else { return }
+                    windowModel.mirrorNavigation(sender: sender, location: sender.location)
+                    // Dolphin: keep the integrated terminal's cwd in step with navigation
+                    if app.prefs.syncTerminalCD, windowModel.terminalVisible,
+                       sender === windowModel.activeTab, let url = sender.currentFolderURL {
+                        terminal.autoCD(to: url)
                     }
                 }
                 .focusedSceneValue(\.explorerWindow, windowModel)
         )
+        // Per-window object: lets child views (address bar) scope app-wide
+        // notifications to the active pane of the window they live in.
+        .environmentObject(windowModel)
+    }
+
+    /// Cross-window notifications (posted app-wide) must only be honored by the
+    /// window the user acted on — the key window.
+    private func isKeyWindow() -> Bool {
+        guard let window = chrome.window else { return true }
+        return NSApp.keyWindow === window
     }
 
     private var rootContent: some View {
@@ -335,6 +348,24 @@ struct MainWindow: View {
             // callback); any fresh mouse-down means the previous drag is over.
             if event.type == .leftMouseDown, let app, !app.draggingURLs.isEmpty {
                 app.draggingURLs = []
+            }
+
+            // Right-click selects the item under the cursor first (Explorer): the
+            // native context menu still opens; we only fix the selection it acts on.
+            if event.type == .rightMouseDown, event.modifierFlags.intersection(.deviceIndependentFlagsMask).isEmpty {
+                for pane in model.panes {
+                    let tab = pane.controller.active
+                    guard case .folder = tab.location, tab.contentClipInWin.contains(point) else { continue }
+                    let origin = tab.contentOriginInWin
+                    if let hit = tab.itemFrames.first(where: { $0.value.offsetBy(dx: origin.x, dy: origin.y).contains(point) }),
+                       let idx = tab.sortedItems.firstIndex(where: { $0.id == hit.key }),
+                       !tab.selection.contains(hit.key) {
+                        tab.selection = [hit.key]
+                        tab.anchorIndex = idx
+                        tab.focusIndex = idx
+                    }
+                    break
+                }
             }
 
             // Middle click: close the tab under the cursor, or open the folder item

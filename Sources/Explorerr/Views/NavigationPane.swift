@@ -80,10 +80,12 @@ struct NavigationPane: View {
         }
 
         let home = DirectoryLoader.homeURL
-        for special in ["Desktop", "Downloads", "Documents", "Pictures", "Music", "Videos"] {
-            let url = home.appendingPathComponent(special, isDirectory: true)
+        // Windows labels, macOS folder names ("Videos" is ~/Movies on a Mac).
+        for (label, folder) in [("Desktop", "Desktop"), ("Downloads", "Downloads"), ("Documents", "Documents"),
+                                ("Pictures", "Pictures"), ("Music", "Music"), ("Videos", "Movies")] {
+            let url = home.appendingPathComponent(folder, isDirectory: true)
             if !app.isPinned(url.standardizedFileURL.path) {
-                nodes.append(NavNode(id: "pin:\(url.path)", label: special, location: .folder(url), children: .folders(url)))
+                nodes.append(NavNode(id: "pin:\(url.path)", label: label, location: .folder(url), children: .folders(url)))
             }
         }
         for pin in app.pins {
@@ -316,10 +318,10 @@ struct NavFolderDropTarget: ViewModifier {
             content.onDrop(of: [UTType.fileURL.identifier], isTargeted: $targeted) { providers in
                 Task {
                     let urls = await FolderContentView.loadURLs(from: providers)
-                        .filter { $0.standardizedFileURL.path != dest.standardizedFileURL.path }
-                    guard !urls.isEmpty else { return }
-                    let internalDrag = urls.contains { app.draggingURLs.contains($0.path) }
-                    await FileOps.transfer(urls, to: dest, move: internalDrag, app: app, tab: tab)
+                    let (sources, move) = FileOps.resolveDrop(providerURLs: urls, draggingPaths: app.draggingURLs, destination: dest)
+                    let final = sources.filter { $0.standardizedFileURL.path != dest.standardizedFileURL.path }
+                    guard !final.isEmpty else { return }
+                    await FileOps.transfer(final, to: dest, move: move, app: app, tab: tab)
                     app.draggingURLs = []
                 }
                 return true

@@ -334,7 +334,7 @@ struct ExplorerCommands: Commands {
                     tab?.navigate(.folder(DirectoryLoader.homeURL.appendingPathComponent("Movies")))
                 }
                 Button("This PC") { tab?.navigate(.thisPC) }
-                    .keyboardShortcut("c", modifiers: [.command, .shift])
+                    .keyboardShortcut("e", modifiers: [.command, .shift])
                 Button("Recycle Bin") { tab?.navigate(.trash) }
                 Button("Network") { tab?.navigate(.network) }
 

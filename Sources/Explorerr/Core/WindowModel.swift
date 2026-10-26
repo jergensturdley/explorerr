@@ -27,7 +27,6 @@ struct SessionLayout: Codable {
 @MainActor
 final class WindowModel: ObservableObject {
     static let maxPanes = 3
-    static let registry = NSHashTable<WindowModel>.weakObjects()
 
     @Published var panes: [PaneModel]
     @Published var activePaneID: UUID
@@ -86,7 +85,9 @@ final class WindowModel: ObservableObject {
             panes = initial
             activePaneID = initial[0].id
         }
-        Self.registry.add(self)
+        // THE fan-out registry: AppModel's refresh/session loops iterate this table.
+        // Registering anywhere else leaves every window deaf (the 1.0–1.1.7 bug).
+        AppModel.windowRegistry.add(self)
         app.layoutChanged()
     }
 
@@ -179,11 +180,13 @@ final class WindowModel: ObservableObject {
     }
 
     /// Mirror a navigation from one pane's tab into every other pane's active tab.
+    /// Only tabs owned by this window trigger mirroring; foreign windows' tabs
+    /// (the notification is app-wide) must never steer this window's panes.
     func mirrorNavigation(sender: TabState, location: Location) {
         guard syncPanes, panes.count > 1, !isMirroring else { return }
-        let senderPane = panes.first { $0.controller.tabs.contains { $0 === sender } }
+        guard let senderPane = panes.first(where: { $0.controller.tabs.contains { $0 === sender } }) else { return }
         isMirroring = true
-        for pane in panes where pane.id != senderPane?.id {
+        for pane in panes where pane.id != senderPane.id {
             pane.controller.active.navigate(location, addHistory: true)
         }
         isMirroring = false

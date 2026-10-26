@@ -33,4 +33,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     func applicationDidFinishLaunching(_ notification: Notification) {
         NSApp.activate(ignoringOtherApps: true)
     }
+    func applicationWillTerminate(_ notification: Notification) {
+        // A quit inside the 400 ms session debounce would otherwise lose the layout.
+        for window in AppModel.windowRegistry.allObjects {
+            window.saveSession()
+        }
+    }
 }

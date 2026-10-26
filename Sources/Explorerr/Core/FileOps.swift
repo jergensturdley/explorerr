@@ -20,6 +20,7 @@ final class TransferProgress: ObservableObject {
     @Published var currentName = ""
     @Published var finished = false
     var cancelled = false
+    var isMove = false
 }
 
 // MARK: - FileOps
@@ -48,12 +49,22 @@ enum FileOps {
     // MARK: open
 
     static func open(_ url: URL, app: AppModel) {
-        var isDir: ObjCBool = false
-        if fm.fileExists(atPath: url.path, isDirectory: &isDir), isDir.boolValue {
-            return // folders handled by navigation
+        if opensByNavigation(url) {
+            return // plain folders are handled by navigation
         }
         NSWorkspace.shared.open(url)
         app.recordRecent(url)
+    }
+
+    /// Directories that are actually folders navigate; packages and bundles
+    /// (.app, .key, .rtfd — directories that read as packages) must be opened.
+    nonisolated static func opensByNavigation(_ url: URL) -> Bool {
+        var isDir: ObjCBool = false
+        guard FileManager.default.fileExists(atPath: url.path, isDirectory: &isDir), isDir.boolValue else {
+            return false
+        }
+        let isPackage = (try? url.resourceValues(forKeys: [.isPackageKey]))?.isPackage ?? false
+        return !isPackage
     }
 
     /// Double-click behavior: folders navigate in the tab, files open.
@@ -122,19 +133,29 @@ enum FileOps {
         // Run with progress sheet
         let progress = TransferProgress()
         progress.total = actionable.count
+        progress.isMove = move
         app.activeSheet = .progress(progress)
 
         var transferred: [URL] = []
         var movedPairs: [(from: URL, to: URL)] = []
         var errors: [String] = []
 
+        // Per-item IO runs detached so the progress sheet paints and Cancel stays
+        // clickable; the main actor only accumulates results.
         for entry in actionable {
             if progress.cancelled { break }
             progress.currentName = entry.src.lastPathComponent
             do {
-                if let final = try transferOne(entry.src, into: destDir, move: move, choice: entry.choice) {
+                let src = entry.src, destRoot = destDir, doMove = move, choice = entry.choice
+                let result = try await Task.detached(priority: .userInitiated) { () -> (URL?, Bool) in
+                    try transferOneIO(src, into: destRoot, move: doMove, choice: choice)
+                }.value
+                if let final = result.0 {
                     transferred.append(final)
-                    if move { movedPairs.append((entry.src, final)) }
+                    // A merge folds the source into an existing destination tree;
+                    // moving that tree back would drag the user's pre-existing
+                    // files along, so merged entries are excluded from undo.
+                    if move, !result.1 { movedPairs.append((entry.src, final)) }
                 }
             } catch {
                 errors.append("\(entry.src.lastPathComponent): \(error.localizedDescription)")
@@ -153,15 +174,26 @@ enum FileOps {
         if move {
             app.clearCutState()
             if !movedPairs.isEmpty {
-                // Undo: move everything back
+                // Undo: move everything back. Redo: apply the move again.
                 let pairs = movedPairs
-                app.registerUndo(.customInverse(label: "Move", undo: { [weak app] in
-                    guard let app else { return }
-                    for pair in pairs {
-                        try? FileManager.default.moveItem(at: pair.to, to: pair.from)
+                app.registerUndo(.customInverse(
+                    label: "Move",
+                    undo: { [weak app] in
+                        guard let app else { return }
+                        for pair in pairs {
+                            try? FileManager.default.moveItem(at: pair.to, to: pair.from)
+                        }
+                        app.foldersChanged([destDir] + pairs.map { $0.from.deletingLastPathComponent() })
+                    },
+                    redo: { [weak app] in
+                        guard let app else { return }
+                        for pair in pairs where FileManager.default.fileExists(atPath: pair.from.path) {
+                            try? FileManager.default.removeItem(at: pair.to)
+                            try? FileManager.default.moveItem(at: pair.from, to: pair.to)
+                        }
+                        app.foldersChanged([destDir] + pairs.map { $0.from.deletingLastPathComponent() })
                     }
-                    app.foldersChanged([destDir] + pairs.map { $0.from.deletingLastPathComponent() })
-                }))
+                ))
             }
             app.foldersChanged([destDir] + sources.map { $0.deletingLastPathComponent() })
         } else if !transferred.isEmpty {
@@ -171,14 +203,25 @@ enum FileOps {
         tab?.reload()
     }
 
-    private static func transferOne(_ src: URL, into destDir: URL, move: Bool, choice: ConflictChoice?) throws -> URL? {
-        let fm = self.fm
+    /// Pure FileManager work for one transfer step. Returns the final URL and
+    /// whether the destination already existed and was merged into (folder "Replace"
+    /// merges like Explorer instead of deleting the destination tree first).
+    nonisolated private static func transferOneIO(_ src: URL, into destDir: URL, move: Bool, choice: ConflictChoice?) throws -> (URL?, Bool) {
+        let fm = FileManager.default
         var dest = destDir.appendingPathComponent(src.lastPathComponent, isDirectory: src.hasDirectoryPath)
         if fm.fileExists(atPath: dest.path) {
             switch choice {
             case .skip, .none:
-                return nil
+                return (nil, false)
             case .replace:
+                var destIsDir: ObjCBool = false
+                var srcIsDir: ObjCBool = false
+                if fm.fileExists(atPath: dest.path, isDirectory: &destIsDir), destIsDir.boolValue,
+                   fm.fileExists(atPath: src.path, isDirectory: &srcIsDir), srcIsDir.boolValue {
+                    try mergeTree(src, into: dest)
+                    if move { try? fm.removeItem(at: src) }
+                    return (dest, true)
+                }
                 try? fm.removeItem(at: dest)
             case .keepBoth:
                 dest = uniqueURL(for: dest)
@@ -190,16 +233,61 @@ enum FileOps {
             } else {
                 try fm.copyItem(at: src, to: dest)
             }
-            return dest
+            return (dest, false)
         } catch {
             // Cross-volume move: copy then remove source
             if move {
                 try fm.copyItem(at: src, to: dest)
                 try? fm.removeItem(at: src)
-                return dest
+                return (dest, false)
             }
             throw error
         }
+    }
+
+    /// Explorer-style folder merge: copy `src`'s children into the existing `dest`,
+    /// replacing files, recursing into subfolders that exist on both sides.
+    nonisolated private static func mergeTree(_ src: URL, into dest: URL) throws {
+        let fm = FileManager.default
+        let children = (try? fm.contentsOfDirectory(atPath: src.path)) ?? []
+        for name in children {
+            var isDir: ObjCBool = false
+            fm.fileExists(atPath: src.appendingPathComponent(name).path, isDirectory: &isDir)
+            let from = src.appendingPathComponent(name, isDirectory: isDir.boolValue)
+            let to = dest.appendingPathComponent(name, isDirectory: isDir.boolValue)
+            var toIsDir: ObjCBool = false
+            if fm.fileExists(atPath: to.path, isDirectory: &toIsDir), isDir.boolValue, toIsDir.boolValue {
+                try mergeTree(from, into: to)
+            } else {
+                try? fm.removeItem(at: to)
+                try fm.copyItem(at: from, to: to)
+            }
+        }
+    }
+
+    // MARK: drag-and-drop semantics
+
+    /// Resolves what a drop should transfer. An internal drag (the provider came
+    /// from this app's onDrag) transfers the whole dragged selection — SwiftUI's
+    /// onDrag only ships one NSItemProvider per drag. Internal drops move within a
+    /// volume and copy across volumes, like Explorer/Finder; external drops copy.
+    nonisolated static func resolveDrop(providerURLs: [URL], draggingPaths: Set<String>, destination: URL) -> (sources: [URL], move: Bool) {
+        guard !draggingPaths.isEmpty,
+              providerURLs.contains(where: { draggingPaths.contains($0.path) || draggingPaths.contains($0.standardizedFileURL.path) }) else {
+            return (providerURLs, false)
+        }
+        let sources = draggingPaths.sorted().map { URL(fileURLWithPath: $0) }
+        let move = sources.allSatisfy { isSameVolume($0, destination) }
+        return (sources, move)
+    }
+
+    nonisolated static func isSameVolume(_ a: URL, _ b: URL) -> Bool {
+        let keys: Set<URLResourceKey> = [.volumeIdentifierKey]
+        guard let va = (try? a.resourceValues(forKeys: keys))?.volumeIdentifier,
+              let vb = (try? b.resourceValues(forKeys: keys))?.volumeIdentifier else {
+            return true // resource values unavailable (already moved?): keep old move behavior
+        }
+        return va.isEqual(vb)
     }
 
     // MARK: paste
@@ -222,7 +310,7 @@ enum FileOps {
         if app.prefs.confirmDelete {
             app.confirm = ConfirmRequest(
                 title: permanent ? "Delete Permanently" : "Delete",
-                message: "Are you sure you want to move \(items.count == 1 ? "“\(items.first!.displayName)”" : "these \(items.count) items") to the Recycle Bin?",
+                message: confirmMessage(items: items, permanent: permanent),
                 confirmLabel: permanent ? "Delete" : "Yes",
                 destructive: permanent,
                 action: { Task { await run() } }
@@ -232,16 +320,28 @@ enum FileOps {
         }
     }
 
+    /// The confirmation prompt; permanent deletion must not mention the Recycle Bin.
+    nonisolated static func confirmMessage(items: [FSItem], permanent: Bool) -> String {
+        let what = items.count == 1 ? "“\(items.first?.displayName ?? "")”" : "these \(items.count) items"
+        if permanent {
+            return "Are you sure you want to permanently delete \(what)? This cannot be undone."
+        }
+        return "Are you sure you want to move \(what) to the Recycle Bin?"
+    }
+
     private static func doDelete(_ urls: [URL], app: AppModel, permanent: Bool) async {
         if permanent {
             for u in urls { try? fm.removeItem(at: u) }
             app.foldersChanged(urls.map { $0.deletingLastPathComponent() })
             return
         }
-        // Record origins for undo/put-back
+        // Record origins for undo/put-back, keyed by the name the item will carry
+        // inside the Trash (macOS mangles duplicate names there), plus the plain
+        // filename as a fallback for unmangled entries.
+        let trash = DirectoryLoader.trashURL
+        let before = Set((try? fm.contentsOfDirectory(atPath: trash.path)) ?? [])
         var origins = app.trashOrigins
         for u in urls { origins[u.lastPathComponent] = u.path }
-        app.trashOrigins = origins
 
         let ok = await withCheckedContinuation { (cont: CheckedContinuation<Bool, Never>) in
             NSWorkspace.shared.recycle(urls) { _, error in
@@ -250,17 +350,46 @@ enum FileOps {
         }
         if !ok {
             // Fallback: at least try plain removal to trash dir
-            let trash = DirectoryLoader.trashURL
             for u in urls {
                 var dst = trash.appendingPathComponent(u.lastPathComponent, isDirectory: u.hasDirectoryPath)
                 if fm.fileExists(atPath: dst.path) { dst = uniqueURL(for: dst) }
                 try? fm.moveItem(at: u, to: dst)
             }
         }
+        let after = Set((try? fm.contentsOfDirectory(atPath: trash.path)) ?? [])
+        for (key, value) in trashOriginUpdate(deleted: urls, before: before, after: after) {
+            origins[key] = value
+        }
+        app.trashOrigins = origins
         app.registerUndo(.trashed(urls: urls))
         app.cutURLs.subtract(urls.map { $0.path })
         app.foldersChanged(urls.map { $0.deletingLastPathComponent() })
         app.toast("Moved \(urls.count) item\(urls.count == 1 ? "" : "s") to the Recycle Bin")
+    }
+
+    /// Maps each deleted file to the name it now bears inside the Trash: new trash
+    /// entries (after minus before) are matched to deleted files by name prefix,
+    /// so two same-named files from different folders both keep a put-back origin.
+    nonisolated static func trashOriginUpdate(deleted: [URL], before: Set<String>, after: Set<String>) -> [String: String] {
+        var newNames = after.subtracting(before).sorted()
+        guard !newNames.isEmpty else { return [:] }
+        var update: [String: String] = [:]
+        for u in deleted {
+            let base = u.lastPathComponent
+            // Exact (unmangled) name wins; otherwise the first mangled variant
+            // (macOS inserts " N" before the extension: "a.txt" -> "a 2.txt").
+            let stem = (base as NSString).deletingPathExtension
+            if let exact = newNames.firstIndex(of: base) {
+                update[base] = u.path
+                newNames.remove(at: exact)
+            } else if let idx = newNames.firstIndex(where: {
+                $0.hasPrefix(stem + " ") || $0.hasPrefix(stem + "~") || $0.hasPrefix(base + ".")
+            }) {
+                update[newNames[idx]] = u.path
+                newNames.remove(at: idx)
+            }
+        }
+        return update
     }
 
     // MARK: restore from trash

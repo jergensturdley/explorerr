@@ -311,7 +311,7 @@ enum UndoOperation {
     case trashed(urls: [URL])
     case created(urls: [URL])                 // inverse: trash these
     case pasted(urls: [URL])                  // inverse: trash these
-    case customInverse(label: String, undo: @MainActor () -> Void)
+    case customInverse(label: String, undo: @MainActor () -> Void, redo: (@MainActor () -> Void)? = nil)
 
     var title: String {
         switch self {
@@ -320,7 +320,7 @@ enum UndoOperation {
         case .trashed: return "Delete"
         case .created: return "New"
         case .pasted: return "Paste"
-        case .customInverse(let label, _): return label
+        case .customInverse(let label, _, _): return label
         }
     }
 }

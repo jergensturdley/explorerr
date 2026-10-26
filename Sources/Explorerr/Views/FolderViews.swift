@@ -367,15 +367,26 @@ struct ListRow: View {
     @EnvironmentObject var theme: Theme
     @State private var hovering = false
 
+    private var renaming: Bool { tab.renamingID == item.id }
+
     var body: some View {
         let p = Win11.palette(theme.scheme)
         HStack(spacing: 7) {
             FileIconView(item: item, size: 17)
-            Text(app.prefs.showExtensions || item.isDirectory ? item.displayName : item.nameWithoutExtension)
-                .font(Win11.Fonts.body)
-                .foregroundStyle(tab.selection.contains(item.id) ? p.selectionText : p.textPrimary)
-                .lineLimit(1)
-                .truncationMode(.middle)
+            if renaming {
+                InlineRenameField(initialName: item.displayName) { newName in
+                    tab.renamingID = nil
+                    FileOps.renameItem(item, to: newName, app: app)
+                } onCancel: {
+                    tab.renamingID = nil
+                }
+            } else {
+                Text(app.prefs.showExtensions || item.isDirectory ? item.displayName : item.nameWithoutExtension)
+                    .font(Win11.Fonts.body)
+                    .foregroundStyle(tab.selection.contains(item.id) ? p.selectionText : p.textPrimary)
+                    .lineLimit(1)
+                    .truncationMode(.middle)
+            }
             Spacer(minLength: 0)
         }
         .frame(height: app.prefs.compactRows ? 24 : Win11.Metrics.rowHeightList)

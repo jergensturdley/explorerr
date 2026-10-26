@@ -87,7 +87,7 @@ struct ProgressSheet: View {
         let p = Win11.palette(theme.scheme)
         let fraction = progress.total > 0 ? Double(progress.done) / Double(progress.total) : 0
         VStack(alignment: .leading, spacing: 14) {
-            Text("Moving — \(Int(fraction * 100))% complete")
+            Text("\(progress.isMove ? "Moving" : "Copying") — \(Int(fraction * 100))% complete")
                 .font(.system(size: 14, weight: .semibold))
                 .foregroundStyle(p.textPrimary)
 

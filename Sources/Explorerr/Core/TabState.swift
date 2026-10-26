@@ -85,6 +85,7 @@ final class TabState: ObservableObject, Identifiable {
         anchorIndex = nil
         focusIndex = nil
         renamingID = nil
+        filters = []
         loadTask?.cancel()
         searchTask?.cancel()
         isSearching = false
@@ -135,7 +136,10 @@ final class TabState: ObservableObject, Identifiable {
     private func navigateInternal(_ to: Location) {
         location = to
         selection = []
+        anchorIndex = nil
+        focusIndex = nil
         renamingID = nil
+        filters = []
         loadTask?.cancel()
         searchTask?.cancel()
         isSearching = false
@@ -358,11 +362,12 @@ final class TabState: ObservableObject, Identifiable {
     }
 
     /// ⇧+arrow to an absolute row (spatial grid navigation): selects the index range
-    /// between the anchor and `next`, Explorer-style.
+    /// between the anchor and `next`, Explorer-style. The anchor is clamped — a stale
+    /// anchor from a previous, larger listing must never index out of bounds.
     func extendSelection(to next: Int) {
         let items = sortedItems
         guard items.indices.contains(next) else { return }
-        let anchor = anchorIndex ?? focusIndex ?? next
+        let anchor = min(max(anchorIndex ?? focusIndex ?? next, 0), items.count - 1)
         anchorIndex = anchor
         focusIndex = next
         let range = min(anchor, next)...max(anchor, next)

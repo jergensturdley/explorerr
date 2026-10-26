@@ -23,6 +23,21 @@ enum SelfTest {
         try? FileManager.default.createDirectory(at: tmp, withIntermediateDirectories: true)
         defer { try? FileManager.default.removeItem(at: tmp) }
 
+        // The fixed window registry makes selftest windows persist their session;
+        // snapshot the real one and restore it at the end.
+        let savedSessionTabs = UserDefaults.standard.object(forKey: "explorerr.session.tabs")
+
+        // Spins the main runloop so detached loads/reloads can deliver while a
+        // condition is awaited (with a timeout).
+        func drain(until condition: @autoclosure () -> Bool, timeout: TimeInterval = 2) -> Bool {
+            let deadline = Date().addingTimeInterval(timeout)
+            while Date() < deadline {
+                if condition() { return true }
+                RunLoop.main.run(mode: .default, before: Date().addingTimeInterval(0.05))
+            }
+            return condition()
+        }
+
         // Unique names
         do {
             let base = tmp.appendingPathComponent("New folder", isDirectory: true)
@@ -341,6 +356,114 @@ enum SelfTest {
             tc.active.sortAscending = false
             app.resetAllTabsToDefaults()
             expect(app.folderPrefs.isEmpty, "resetAllTabsToDefaults clears folderPrefs")
+        }
+
+        // Window registry fan-out (the 1.0–1.1.7 "nothing refreshes, nothing saves" bug)
+        do {
+            let app = AppModel()
+            let model = WindowModel(app: app)
+            expect(AppModel.windowRegistry.allObjects.contains { $0 === model },
+                   "window registry fan-out registers windows")
+
+            let dir = tmp.appendingPathComponent("registry-check", isDirectory: true)
+            try? FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+            let file = dir.appendingPathComponent("gone.txt")
+            FileManager.default.createFile(atPath: file.path, contents: Data())
+            let tab = model.activeTab
+            tab.navigate(.folder(dir))
+            expect(drain(until: !tab.loading && !tab.items.isEmpty), "window registry fan-out loads the folder")
+
+            try? FileManager.default.removeItem(at: file)
+            app.foldersChanged([dir])
+            expect(drain(until: tab.items.isEmpty), "window registry fan-out refreshes tabs after delete")
+        }
+
+        // Stale selection anchors must never index out of bounds (back/forward crash)
+        do {
+            let app = AppModel()
+            let t = TabState(app: app, location: .home)
+            t.navigate(.thisPC)
+            let a = FSItem(url: URL(fileURLWithPath: "/tmp/a"), fileName: "a", isDirectory: false)
+            let b = FSItem(url: URL(fileURLWithPath: "/tmp/b"), fileName: "b", isDirectory: false)
+            t.items = [a, b]
+            t.selection = [a.id]
+            t.anchorIndex = 5000
+            t.focusIndex = 5000
+            t.extendSelection(to: 1)
+            expect(t.selection == [b.id], "stale anchor clamped instead of crashing")
+            t.anchorIndex = 4242
+            t.goBack() // returns via navigateInternal, which must clear the anchor
+            expect(t.anchorIndex == nil && t.focusIndex == nil, "stale anchor cleared by history navigation")
+
+            t.filters = [.image]
+            t.navigate(.thisPC)
+            expect(t.filters.isEmpty, "filters reset on navigation")
+        }
+
+        // Redo must run the forward closure, not the undo closure again
+        do {
+            let app = AppModel()
+            final class Box { var value = 0 }
+            let box = Box()
+            app.registerUndo(.customInverse(label: "Move", undo: { box.value -= 1 }, redo: { box.value += 1 }))
+            app.undo()
+            expect(box.value == -1, "undo closure runs")
+            app.redo()
+            expect(box.value == 0, "redo closure runs forward operation")
+        }
+
+        // Packages open; plain folders still navigate
+        do {
+            let dir = tmp.appendingPathComponent("plaindir", isDirectory: true)
+            try? FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+            let file = tmp.appendingPathComponent("note.txt")
+            FileManager.default.createFile(atPath: file.path, contents: Data())
+            let calc = URL(fileURLWithPath: "/System/Applications/Calculator.app")
+            expect(FileOps.opensByNavigation(dir), "package open decision: plain folder navigates")
+            expect(!FileOps.opensByNavigation(file), "package open decision: file opens")
+            expect(!FileOps.opensByNavigation(calc), "package open decision: app bundle opens")
+        }
+
+        // Drop semantics: whole internal selection, external drags copy
+        do {
+            let f1 = tmp.appendingPathComponent("drop1.txt")
+            let f2 = tmp.appendingPathComponent("drop2.txt")
+            FileManager.default.createFile(atPath: f1.path, contents: Data())
+            FileManager.default.createFile(atPath: f2.path, contents: Data())
+            let (internalSrc, internalMove) = FileOps.resolveDrop(
+                providerURLs: [f1], draggingPaths: [f1.path, f2.path], destination: tmp)
+            expect(internalSrc.count == 2 && internalMove, "drop source uses whole internal drag selection")
+            let (externalSrc, externalMove) = FileOps.resolveDrop(
+                providerURLs: [f1, f2], draggingPaths: [], destination: tmp)
+            expect(externalSrc.count == 2 && !externalMove, "drop source external drags copy")
+        }
+
+        // Permanent-delete wording must not mention the Recycle Bin
+        do {
+            let item = FSItem(url: tmp.appendingPathComponent("x.txt"), fileName: "x.txt", isDirectory: false)
+            let permanentMsg = FileOps.confirmMessage(items: [item], permanent: true)
+            expect(permanentMsg.contains("permanently delete") && !permanentMsg.contains("Recycle Bin"),
+                   "delete confirm text matches the operation")
+            expect(FileOps.confirmMessage(items: [item], permanent: false).contains("Recycle Bin"),
+                   "delete confirm keeps Recycle Bin wording for soft delete")
+        }
+
+        // Trash origin keys survive same-name deletes via trash-name matching
+        do {
+            let update = FileOps.trashOriginUpdate(
+                deleted: [URL(fileURLWithPath: "/d1/a.txt"), URL(fileURLWithPath: "/d2/a.txt")],
+                before: [],
+                after: ["a.txt", "a 2.txt"])
+            expect(update["a.txt"] == "/d1/a.txt" && update["a 2.txt"] == "/d2/a.txt",
+                   "trash origins keyed by trash names survive same-name deletes")
+        }
+
+        // Let debounced session saves from these tests fire, then restore the real session.
+        _ = drain(until: true, timeout: 0.7)
+        if let saved = savedSessionTabs {
+            UserDefaults.standard.set(saved, forKey: "explorerr.session.tabs")
+        } else {
+            UserDefaults.standard.removeObject(forKey: "explorerr.session.tabs")
         }
 
         print(failures == 0 ? "SELFTEST PASSED (\(count) checks)" : "SELFTEST FAILED: \(failures)/\(count)")

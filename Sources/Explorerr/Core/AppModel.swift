@@ -261,9 +261,13 @@ final class AppModel: ObservableObject {
             } else {
                 toast("Redo is not available for this operation")
             }
-        case .customInverse(_, let undo):
-            undo()
-            reRegister = op
+        case .customInverse(_, let undo, let redo):
+            if let redo {
+                redo()
+                reRegister = op
+            } else {
+                toast("Redo is not available for this operation")
+            }
         default:
             toast("Redo is not available for this operation")
         }
@@ -293,7 +297,7 @@ final class AppModel: ObservableObject {
                     self?.foldersChanged(urls.map { $0.deletingLastPathComponent() })
                 }
             }
-        case .customInverse(_, let undo):
+        case .customInverse(_, let undo, _):
             undo()
         }
         toast("Undid \(op.title)")

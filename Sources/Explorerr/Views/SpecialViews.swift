@@ -12,8 +12,10 @@ struct HomeView: View {
         var urls: [URL] = []
         for pin in app.pins { urls.append(URL(fileURLWithPath: pin, isDirectory: true)) }
         let home = DirectoryLoader.homeURL
-        for special in ["Desktop", "Downloads", "Documents", "Pictures", "Music", "Videos"] {
-            let url = home.appendingPathComponent(special, isDirectory: true)
+        // Windows labels, macOS folder names ("Videos" is ~/Movies on a Mac).
+        for (_, folder) in [("Desktop", "Desktop"), ("Downloads", "Downloads"), ("Documents", "Documents"),
+                            ("Pictures", "Pictures"), ("Music", "Music"), ("Videos", "Movies")] {
+            let url = home.appendingPathComponent(folder, isDirectory: true)
             if !app.isPinned(url.standardizedFileURL.path) { urls.append(url) }
         }
         return urls
@@ -186,7 +188,7 @@ struct ThisPCView: View {
 
     private var userFolders: [URL] {
         let home = DirectoryLoader.homeURL
-        return ["Desktop", "Documents", "Downloads", "Music", "Pictures", "Videos"]
+        return ["Desktop", "Documents", "Downloads", "Music", "Pictures", "Movies"]
             .map { home.appendingPathComponent($0, isDirectory: true) }
             .filter { FileManager.default.fileExists(atPath: $0.path) }
     }

@@ -74,7 +74,14 @@ struct ShelfBar: View {
             Task {
                 let urls = await FolderContentView.loadURLs(from: providers)
                 guard !urls.isEmpty else { return }
-                app.addToShelf(urls)
+                // An internal drag carries only one NSItemProvider; shelve the
+                // whole dragged selection instead of just that provider.
+                if !app.draggingURLs.isEmpty,
+                   urls.contains(where: { app.draggingURLs.contains($0.standardizedFileURL.path) }) {
+                    app.addToShelf(app.draggingURLs.sorted().map { URL(fileURLWithPath: $0) })
+                } else {
+                    app.addToShelf(urls)
+                }
                 app.draggingURLs = []
             }
             return true

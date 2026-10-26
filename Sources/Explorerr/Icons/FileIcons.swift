@@ -26,7 +26,7 @@ enum FolderVariant {
         if path == home.path { return .home }
         let map: [String: FolderVariant] = [
             "Desktop": .desktop, "Downloads": .downloads, "Documents": .documents,
-            "Music": .music, "Pictures": .pictures, "Videos": .videos,
+            "Music": .music, "Pictures": .pictures, "Videos": .videos, "Movies": .videos,
         ]
         let parent = (path as NSString).deletingLastPathComponent
         if parent == home.path, let v = map[url.lastPathComponent] { return v }

@@ -144,9 +144,10 @@ struct FolderContentView: View {
         let app = self.app
         Task {
             let urls = await Self.loadURLs(from: providers)
-            guard !urls.isEmpty else { return }
-            let internalDrag = urls.contains { app.draggingURLs.contains($0.path) }
-            await FileOps.transfer(urls, to: dest, move: internalDrag, app: app, tab: tab)
+            let (sources, move) = FileOps.resolveDrop(providerURLs: urls, draggingPaths: app.draggingURLs, destination: dest)
+            let final = sources.filter { $0.standardizedFileURL.path != dest.standardizedFileURL.path }
+            guard !final.isEmpty else { return }
+            await FileOps.transfer(final, to: dest, move: move, app: app, tab: tab)
             app.draggingURLs = []
         }
         return true
@@ -287,10 +288,10 @@ struct ItemInteractions: ViewModifier {
                     let dest = item.url
                     Task {
                         let urls = await FolderContentView.loadURLs(from: providers)
-                            .filter { $0.standardizedFileURL.path != dest.standardizedFileURL.path }
-                        guard !urls.isEmpty else { return }
-                        let internalDrag = urls.contains { app.draggingURLs.contains($0.path) }
-                        await FileOps.transfer(urls, to: dest, move: internalDrag, app: app, tab: tab)
+                        let (sources, move) = FileOps.resolveDrop(providerURLs: urls, draggingPaths: app.draggingURLs, destination: dest)
+                        let final = sources.filter { $0.standardizedFileURL.path != dest.standardizedFileURL.path }
+                        guard !final.isEmpty else { return }
+                        await FileOps.transfer(final, to: dest, move: move, app: app, tab: tab)
                         app.draggingURLs = []
                     }
                     return true
@@ -420,6 +421,7 @@ struct InlineRenameField: View {
     let onCommit: (String) -> Void
     let onCancel: () -> Void
 
+    @EnvironmentObject var theme: Theme
     @State private var text: String
     @FocusState private var focused: Bool
     @State private var monitor: Any?
@@ -433,19 +435,21 @@ struct InlineRenameField: View {
     }
 
     var body: some View {
+        let p = Win11.palette(theme.scheme)
         TextField("", text: $text)
             .textFieldStyle(.plain)
             .font(Win11.Fonts.body)
+            .foregroundStyle(p.textPrimary)
             .padding(.horizontal, 4)
             .padding(.vertical, 2)
             .background(
                 RoundedRectangle(cornerRadius: 3, style: .continuous)
-                    .fill(Color.white)
+                    .fill(p.contentCard)
                     .shadow(color: .black.opacity(0.06), radius: 1, y: 1)
             )
             .overlay(
                 RoundedRectangle(cornerRadius: 3, style: .continuous)
-                    .strokeBorder(Color(red: 0, green: 103/255, blue: 192/255), lineWidth: 1.5)
+                    .strokeBorder(p.accent, lineWidth: 1.5)
             )
             .focused($focused)
             .onSubmit { commit() }

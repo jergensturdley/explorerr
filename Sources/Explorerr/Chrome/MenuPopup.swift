@@ -247,7 +247,10 @@ struct WinMenuButton<Label: View>: View {
     @EnvironmentObject var coord: MenuCoordinator
     let width: CGFloat
     var enabled: Bool = true
-    let entries: [WinMenuEntry]
+    var entries: [WinMenuEntry] = []
+    /// Built only when the menu opens. Use for menus whose construction does IO
+    /// (folder listings) so the render pass never touches the disk.
+    var lazyEntries: (() -> [WinMenuEntry])? = nil
     @ViewBuilder let label: () -> Label
 
     @State private var anchor: CGRect = .zero
@@ -255,7 +258,7 @@ struct WinMenuButton<Label: View>: View {
     var body: some View {
         Button {
             guard enabled else { return }
-            coord.toggle(anchor: anchor, width: width, entries: entries)
+            coord.toggle(anchor: anchor, width: width, entries: lazyEntries?() ?? entries)
         } label: {
             label()
                 .contentShape(Rectangle())

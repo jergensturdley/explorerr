@@ -12,6 +12,7 @@ struct AddressBar: View {
     @ObservedObject var tab: TabState
     @ObservedObject var app: AppModel
     @EnvironmentObject var theme: Theme
+    @EnvironmentObject var windowModel: WindowModel
 
     @State private var editingPath = false
     @State private var pathText = ""
@@ -44,9 +45,12 @@ struct AddressBar: View {
         .padding(.horizontal, 8)
         .frame(height: Win11.Metrics.addressBarHeight)
         .onReceive(NotificationCenter.default.publisher(for: .explorerrBeginPathEdit)) { _ in
+            // Only the active pane's bar edits; every pane receives the notification.
+            guard windowModel.activeTab === tab else { return }
             beginEditing()
         }
         .onReceive(NotificationCenter.default.publisher(for: .explorerrFocusSearch)) { _ in
+            guard windowModel.activeTab === tab else { return }
             searchFocused = true
         }
         .onDisappear { removeEditorMonitor() }
@@ -152,7 +156,7 @@ struct AddressBar: View {
                     .padding(.vertical, 3)
                     .padding(.horizontal, 3)
 
-                WinMenuButton(width: 240, entries: folderChildrenMenu(crumb.url)) {
+                WinMenuButton(width: 240, lazyEntries: { folderChildrenMenu(crumb.url) }) {
                     Image(systemName: "chevron.down")
                         .font(.system(size: 8.5, weight: .semibold))
                         .foregroundStyle(p.textSecondary)
@@ -172,7 +176,7 @@ struct AddressBar: View {
                 }
                 .buttonStyle(.plain)
 
-                WinMenuButton(width: 240, entries: folderChildrenMenu(crumb.url)) {
+                WinMenuButton(width: 240, lazyEntries: { folderChildrenMenu(crumb.url) }) {
                     Image(systemName: "chevron.right")
                         .font(.system(size: 8.5, weight: .semibold))
                         .foregroundStyle(p.textSecondary)
